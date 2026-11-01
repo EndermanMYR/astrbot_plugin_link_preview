@@ -201,6 +201,12 @@
         "default": "",
         "hint": "不填每小时只能查 60 次"
     },
+    "steam_api_key": {
+        "description": "Steam Web API Key（可选）",
+        "type": "string",
+        "default": "",
+        "hint": "填了才能显示 Steam 游戏的当前在线人数；评测不需要 Key。申请地址 https://steamcommunity.com/dev/apikey"
+    },
     "fetch_timeout": {
         "description": "抓取超时（秒）",
         "type": "int",

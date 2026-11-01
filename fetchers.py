@@ -596,7 +596,77 @@ async def fetch_pixiv(client, url, comments=0):
 # Steam
 # ---------------------------------------------------------------------------
 
-async def fetch_steam(client, url):
+BBCODE_RE = re.compile(
+    r"\[/?(?:b|i|u|s|strike|h1|h2|h3|list|\*|olist|url|quote|code|spoiler|"
+    r"table|tr|td|th|hr|noparse|p|img|video|previewyoutube)(?:=[^\]]*)?\]",
+    re.I,
+)
+
+
+def _steam_plain(text):
+    """评测正文里混着 BBCode 和 HTML，清干净再上卡片。"""
+    t = BBCODE_RE.sub("", str(text or ""))
+    t = re.sub(r"<[^>]+>", "", t)
+    return re.sub(r"\s+", " ", htmllib.unescape(t)).strip()
+
+
+def _steam_review_rows(page, n):
+    """从社区评测页的卡片里抠出作者、推荐与否、时长、赞数和正文。"""
+    rows = []
+    for chunk in re.split(r'<div class="apphub_CardContentMain">', page)[1:]:
+        text = re.search(r'<div class="date_posted">[^<]*</div>(.*?)</div>\s*</div>', chunk, re.S)
+        body = _steam_plain(text.group(1)) if text else ""
+        # 只有链接的评测没有信息量，跳过
+        if not body or re.fullmatch(r"(?:https?://\S+\s*)+", body):
+            continue
+        title = re.search(r'<div class="title">([^<]+)</div>', chunk)
+        hours = re.search(r'<div class="hours">([^<]+)</div>', chunk)
+        who = re.search(r'<div class="apphub_CardContentAuthorName[^"]*"><a[^>]*>([^<]+)</a>', chunk)
+        voted = re.search(r'([\d,]+)\s+people found this review helpful', chunk)
+        tag = (title.group(1) if title else "").strip()
+        tag = "推荐" if tag.lower().startswith("recommended") else ("不推荐" if tag else "")
+        hrs = (hours.group(1) if hours else "").replace(" hrs on record", "").replace(",", "").strip()
+        try:
+            hrs = str(int(float(hrs))) if hrs else ""
+        except ValueError:
+            hrs = ""
+        if tag and hrs:
+            tag += f" · {hrs} 小时"
+        rows.append({
+            "author": (who.group(1).strip() if who else "") + (f"（{tag}）" if tag else ""),
+            "text": body,
+            "likes": voted.group(1) if voted else None,
+            "time": None,
+        })
+        if len(rows) >= n:
+            break
+    return rows
+
+
+async def _steam_reviews(client, appid, n):
+    """评测：appreviews 接口对脚本一律 302，改抓社区评测页（按最有帮助排序）。"""
+    try:
+        r = await client.get(f"https://steamcommunity.com/app/{appid}/reviews/",
+                             params={"browsefilter": "toprated", "snr": "1_5_100010_"})
+    except httpx.HTTPError:
+        return []
+    return _steam_review_rows(r.text, n) if r.status_code == 200 else []
+
+
+async def _steam_online(client, appid, key):
+    """当前在线人数，需要 Steam Web API Key。"""
+    if not key:
+        return None
+    try:
+        r = await client.get("https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/",
+                             params={"appid": appid, "key": key})
+        d = r.json() if r.status_code == 200 else {}
+    except (httpx.HTTPError, ValueError):
+        return None
+    return (d.get("response") or {}).get("player_count")
+
+
+async def fetch_steam(client, url, comments=0, api_key=None):
     appid = LINK_PATTERNS[6][1].match(url).group(1)
     r = await client.get("https://store.steampowered.com/api/appdetails",
                          params={"appids": appid, "cc": "cn", "l": "schinese"})
@@ -608,15 +678,20 @@ async def fetch_steam(client, url):
     disc = (g.get("price_overview") or {}).get("discount_percent")
     if disc:
         price = f"{price}（-{disc}%）"
+    rows = await _steam_reviews(client, appid, comments) if comments else []
+    online = await _steam_online(client, appid, api_key)
+    stats = [["价格", price] if price else None,
+             stat("推荐", (g.get("recommendations") or {}).get("total")),
+             stat("在线", online),
+             ["发售", (g.get("release_date") or {}).get("date")] if (g.get("release_date") or {}).get("date") else None]
     return card("steam", url, title=g.get("name"),
                 text=htmllib.unescape(re.sub(r"<[^>]+>", "", g.get("short_description") or "")),
                 author={"name": "、".join(g.get("developers") or []) or None,
                         "handle": "、".join(g.get("publishers") or []) or None},
                 images=[g.get("header_image")] if g.get("header_image") else [],
-                stats=[["价格", price] if price else None,
-                       stat("推荐", (g.get("recommendations") or {}).get("total")),
-                       ["发售", (g.get("release_date") or {}).get("date")] if (g.get("release_date") or {}).get("date") else None],
-                tags=[x.get("description") for x in g.get("genres") or []][:6])
+                stats=stats,
+                tags=[x.get("description") for x in g.get("genres") or []][:6],
+                comments=rows)
 
 
 # ---------------------------------------------------------------------------
@@ -1108,10 +1183,10 @@ async def fetch_oembed(client, platform, url):
 
 
 # 能拿到评论的平台（X、Reddit 不登录拿不到；Steam 评测接口会拦服务器）
-COMMENT_PLATFORMS = {"youtube", "github", "bluesky", "pixiv", "tiktok", "x"}
+COMMENT_PLATFORMS = {"youtube", "github", "bluesky", "pixiv", "tiktok", "x", "steam"}
 
 
-async def fetch(client, platform, url, github_token=None, comments=0):
+async def fetch(client, platform, url, github_token=None, comments=0, steam_api_key=None):
     if platform == "x":
         return await fetch_x(client, url)
     if platform == "youtube":
@@ -1125,7 +1200,7 @@ async def fetch(client, platform, url, github_token=None, comments=0):
     if platform == "pixiv":
         return await fetch_pixiv(client, url, comments)
     if platform == "steam":
-        return await fetch_steam(client, url)
+        return await fetch_steam(client, url, comments, steam_api_key)
     if platform == "wikipedia":
         return await fetch_wikipedia(client, url)
     if platform == "wikisource":

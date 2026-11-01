@@ -184,12 +184,15 @@ class LinkPreviewPlugin(Star):
         return card
 
     def _filter_article(self, article):
-        if not self._block_on():
-            return article
-        f = self.filter
         texts = [article.get("title"), article.get("byline")]
         for s in article["sections"]:
             texts += [s.get("title"), s.get("text")]
+        # R18 一律整条不发，不打码（和卡片走同一套判定）
+        if _bool(self.config.get("r18_enabled", True), True) and self.r18.find(*texts):
+            raise R18Blocked()
+        if not self._block_on():
+            return article
+        f = self.filter
         if not f.find(*texts):
             return article
         if not self._mask_mode():
@@ -305,7 +308,8 @@ class LinkPreviewPlugin(Star):
                 x_task = asyncio.ensure_future(self._x_replies_for(url, n_comments, wait))
             card = await fetchers.fetch(client, platform, url,
                                         github_token=self.config.get("github_token") or None,
-                                        comments=n_comments)
+                                        comments=n_comments,
+                                        steam_api_key=self.config.get("steam_api_key") or None)
             if x_task:
                 card["comments"] = await x_task
             card = self._filter_card(card)
@@ -512,9 +516,9 @@ class LinkPreviewPlugin(Star):
         self._clean_cache()
         try:
             paths, article, total, hidden = await self._render_article(platform, url)
-        except Blocked:
-            logger.info(f"[LinkPreview] 全文 {url} 命中屏蔽词，已拦截")
-            yield event.plain_result(BLOCK_NOTICE)
+        except Blocked as e:
+            logger.info(f"[LinkPreview] 全文 {url} {'疑似成人内容' if isinstance(e, R18Blocked) else '命中屏蔽词'}，已拦截")
+            yield event.plain_result(e.notice or BLOCK_NOTICE)
             return
         except Exception as e:
             logger.info(f"[LinkPreview] 维基全文失败 {url}：{e}")
