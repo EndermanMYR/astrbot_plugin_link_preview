@@ -217,6 +217,7 @@ class LoginService:
         self.cookie_path = cookie_path
         self.runtime_factory = runtime_factory or RemoteBrowser
         self.ttl = max(30, min(1800, ttl))
+        self.port = port
         self.novnc_dir = Path(novnc_dir)
         self.vnc_port = vnc_port
         self.session = None
@@ -230,6 +231,7 @@ class LoginService:
         app.router.add_get("/health", self.health)
         app.router.add_post("/api/session", self.new_session)
         app.router.add_post("/api/cancel", self.cancel_session)
+        app.router.add_post("/api/public-url", self.set_public_url)
         app.router.add_get("/login/{ticket}", self.redeem)
         app.router.add_post("/redeem/{ticket}", self.activate)
         app.router.add_get("/entry/{name}", self.entry_asset)
@@ -285,8 +287,14 @@ class LoginService:
         return session
 
     def origin(self, request):
-        if request.headers.get("Origin") not in self.origins:
-            raise web.HTTPForbidden(text="来源不匹配")
+        origin = request.headers.get("Origin", "")
+        if origin in self.origins:
+            return
+        # 同源也放行：临时隧道/反代域名变了不用重启容器
+        host = request.headers.get("Host", "")
+        if origin and host and urlsplit(origin).netloc == host:
+            return
+        raise web.HTTPForbidden(text="来源不匹配")
 
     async def health(self, request):
         return web.json_response({"ok": True})
@@ -335,6 +343,25 @@ class LoginService:
                     "expires_in": self.ttl,
                 }
             )
+
+    async def set_public_url(self, request):
+        """运行时更新登录地址，临时隧道换了域名不用重建容器。"""
+        self.admin(request)
+        body = await request.json()
+        url = str(body.get("url", "")).strip().rstrip("/")
+        parsed = urlsplit(url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            return web.json_response({"error": "url 需要是完整的根地址"}, status=400)
+        async with self.lock:
+            self.public_url = url
+            self.origins = {url, f"http://127.0.0.1:{self.port}", f"http://localhost:{self.port}"}
+        return web.json_response({"ok": True, "public_url": self.public_url})
 
     async def cancel_session(self, request):
         self.admin(request)
