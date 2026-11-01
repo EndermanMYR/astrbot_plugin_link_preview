@@ -117,7 +117,7 @@
         "description": "X 帖子也抓评论",
         "type": "bool",
         "default": true,
-        "hint": "通过 X 浏览器服务搜索 conversation_id，单条要 10～30 秒"
+        "hint": "通过 浏览器服务搜索 conversation_id，单条要 10～30 秒"
     },
     "x_comments_wait": {
         "description": "自动预览时 X 评论最多等几秒",
@@ -126,7 +126,7 @@
         "hint": "超时先发不带评论的卡片，后台抓到的评论留给 /评论 指令用"
     },
     "x_browser_url": {
-        "description": "X 浏览器服务地址（可选）",
+        "description": "浏览器服务地址（可选）",
         "type": "string",
         "default": "",
         "hint": "留空时插件会自动查找可用的服务配置"
@@ -144,7 +144,7 @@
         "hint": "私聊发 /x登录 时用。默认是随插件分发的 compose 里的 x-login 服务；不部署就不用管"
     },
     "x_browser_token": {
-        "description": "X 浏览器服务 Token（可选）",
+        "description": "浏览器服务 Token（可选）",
         "type": "string",
         "default": "",
         "hint": "留空时插件会自动查找可用的服务配置"

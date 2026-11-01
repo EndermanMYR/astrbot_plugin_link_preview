@@ -303,7 +303,7 @@ async def fetch_x_replies(service_url, token, tid, n=3, timeout=75):
         })
     data = r.json() if "json" in r.headers.get("content-type", "") else {}
     if r.status_code != 200:
-        raise FetchError(data.get("error") or f"X 浏览器服务 HTTP {r.status_code}")
+        raise FetchError(data.get("error") or f"浏览器服务 HTTP {r.status_code}")
     out = []
     for x in data.get("items") or []:
         if x.get("id") == tid or x.get("sensitive") or not x.get("text"):

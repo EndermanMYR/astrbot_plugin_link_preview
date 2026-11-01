@@ -67,7 +67,7 @@
 | YouTube | 标题、频道、简介、封面、时长、播放/点赞 | ✔ 热门评论 |
 | TikTok | 视频封面或图集、作者、播放/点赞/评论/分享/收藏 | ✔ 按点赞排序 |
 | Instagram | 帖子和 Reels 的作者、配文、图片（通过公开的嵌入修复站读取） | ✘ 需要登录 |
-| X / Twitter | 正文、作者、配图、引用帖、回复/转帖/喜欢/浏览 | ✔ 需配置 X 浏览器服务（较慢，自动预览最多等 15 秒） |
+| X / Twitter | 正文、作者、配图、引用帖、回复/转帖/喜欢/浏览 | ✔ 需配置浏览器服务（较慢，自动预览最多等 15 秒） |
 | GitHub | 仓库、Issue、PR、用户主页 | ✔ Issue/PR 评论 |
 | Bluesky | 正文、作者、配图、互动数 | ✔ 按点赞排序的回复 |
 | pixiv | 标题、作者、标签、数据（R-18 不显示图片） | ✔ |
@@ -215,7 +215,7 @@ AstrBot WebUI -> 插件 -> 插件配置
 |--------|------|
 | `x_comments` | X 帖子也抓评论 |
 | `x_comments_wait` | 自动预览时 X 评论最多等几秒，默认 `15` |
-| `x_browser_url` / `x_browser_token` | X 浏览器服务地址和 Token（抓取 X 评论用） |
+| `x_browser_url` / `x_browser_token` | 浏览器服务地址和 Token（抓取 X 评论用） |
 | `x_cookie` | 手动填的 Cookie（可选），填了就不用走登录链接 |
 
 X 卡片本身走公开接口，不需要登录；只有「热门评论」需要一台登录过 X 的浏览器。这套服务已经随插件放在 [`x-browser-service/`](x-browser-service/README.md)，用 Docker 起两个容器即可：
@@ -235,11 +235,35 @@ docker compose up -d
 
 填了 `x_cookie` 就在插件加载时写进抓取服务；留空则走登录链接。
 
+##### 从哪里拿 Cookie
+
+**前提：在电脑上操作**（手机浏览器看不到开发者工具），并且这个浏览器**已经登录了 x.com**。无痕/隐私窗口不行，关掉就没了。
+
+1. 打开 <https://x.com>，确认右上角是你自己的头像，说明已登录
+2. 按 `F12` 打开开发者工具（macOS 是 `Option + Command + I`）
+3. 切到 **Application** 标签
+   - Chrome / Edge：`Application`
+   - Firefox：`Storage` → `Cookies`
+   - Safari：先「设置 → 高级 → 显示网页开发者功能」，再按 `Option + Command + I`
+4. 左侧展开 **Cookies** → 点 `https://x.com`
+5. 在列表上方的过滤框输入 `auth_token`，找到这一行，双击 **Value** 列复制
+   - 值是 40 位十六进制，形如 `1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b`
+6. 过滤框改成 `ct0`，同样复制它的 Value
+   - **这个是 160 位，很长，别复制漏了**
+7. 把两个值拼成一行：
+
+   ```
+   auth_token=1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b; ct0=9f8e7d6c5b4a...
+   ```
+
+8. 粘进插件配置的 `x_cookie`，保存 → 在 WebUI 里重载插件（或重启 AstrBot）
+
 > [!TIP]
-> 手动填的格式：从浏览器开发者工具 → Application → Cookies → `x.com`，复制 `auth_token` 和 `ct0` 两行，拼成
-> `auth_token=xxxx; ct0=yyyy` 粘进去即可。只粘两条值（用分号或空格隔开）也认。
->
-> 注意 `ct0` 很长（约 160 字符），别复制漏了。改完配置要重载插件或重启 AstrBot 才生效。
+> 只粘两条值也行，不用写 `auth_token=` 前缀，用分号或空格隔开即可。插件会自动识别。
+
+**怎么确认成功**：群里发一个 X 帖子链接，卡片下面出现「热门评论」就说明 Cookie 生效了。没出来的话看日志有没有 `[LinkPreview] 已写入手填的 X Cookie`。
+
+**Cookie 会过期**：改密码、在别处退出登录、太久不用都可能失效。表现是评论突然变空，重新按上面步骤复制一次即可。
 
 #### 🔑 方式二：走一次性登录链接（可选）
 

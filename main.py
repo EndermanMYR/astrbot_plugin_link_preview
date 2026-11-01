@@ -26,7 +26,7 @@ HELP = """外链预览
 /预览图片 [开/关/默认]：管理员切换本群卡片是否显示配图和封面，不带参数查看当前状态
 /预览帮助：查看这条帮助
 /x登录：私聊我，拿一个一次性 X 登录链接（在服务器浏览器里登录，自动保存 Cookie）
-能拿到评论的平台：YouTube、TikTok、X（需配置 X 浏览器服务，较慢）、GitHub Issue/PR、Bluesky、pixiv。Instagram、Reddit 拿不到评论。"""
+能拿到评论的平台：YouTube、TikTok、X（需配置浏览器服务，较慢）、GitHub Issue/PR、Bluesky、pixiv。Instagram、Reddit 拿不到评论。"""
 
 PLUGIN_NAME = "astrbot_plugin_link_preview"
 # 词表默认放在插件数据目录（data/plugin_data/<插件名>/）下，随插件数据一起迁移和审计。
@@ -234,7 +234,7 @@ class LinkPreviewPlugin(Star):
     # ------------------------------------------------------------------ X 回复
 
     def _x_service(self):
-        """X 浏览器服务地址和 Token，只认本插件的配置。"""
+        """浏览器服务地址和 Token，只认本插件的配置。"""
         url = str(self.config.get("x_browser_url", "") or "").strip()
         token = str(self.config.get("x_browser_token", "") or "").strip()
         return (url, token) if url and len(token) >= 32 else (None, None)

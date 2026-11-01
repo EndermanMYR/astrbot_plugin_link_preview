@@ -743,7 +743,7 @@ async def api_search(request):
             settle_ms,
         )
         items = [_user_item(u) for u in raw if u.get("handle")][:count]
-        source = "X 浏览器用户搜索"
+        source = "浏览器用户搜索"
     else:
         raw = await BROWSER.fetch(
             url,
@@ -754,7 +754,7 @@ async def api_search(request):
             settle_ms,
         )
         items = [_post_item(t) for t in raw if t.get("id")][:count]
-        source = "X 浏览器热门帖子搜索" if top else "X 浏览器最新帖子搜索"
+        source = "浏览器热门帖子搜索" if top else "浏览器最新帖子搜索"
     return web.json_response({"source": source, "items": items, "fetched_at": _stamp()})
 
 
@@ -776,7 +776,7 @@ async def api_user(request):
     raw["handle"] = handle
     return web.json_response(
         {
-            "source": "X 浏览器用户资料",
+            "source": "浏览器用户资料",
             "items": [_user_item(raw)],
             "fetched_at": _stamp(),
         }
@@ -801,7 +801,7 @@ async def api_user_posts(request):
     items = [i for i in items if not i["is_retweet"]][:count]
     return web.json_response(
         {
-            "source": "X 浏览器用户最近帖子（排除转发）",
+            "source": "浏览器用户最近帖子（排除转发）",
             "items": items,
             "fetched_at": _stamp(),
         }
@@ -826,7 +826,7 @@ async def api_post(request):
     if not items:
         return web.json_response({"error": "未找到该帖子。"}, status=404)
     return web.json_response(
-        {"source": "X 浏览器帖子详情", "items": items, "fetched_at": _stamp()}
+        {"source": "浏览器帖子详情", "items": items, "fetched_at": _stamp()}
     )
 
 
