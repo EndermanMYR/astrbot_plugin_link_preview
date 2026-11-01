@@ -228,7 +228,10 @@ curl -s -X POST http://127.0.0.1:6080/api/session \
 # {"login_url": "https://xlogin.example.com/login/xxxxxxxx", "expires_in": 900}
 ```
 
-返回的 `login_url` 就是一次性链接，**15 分钟内有效，只能用一次**。在服务器上执行用 `127.0.0.1:6080`，从外部调就换成你的 HTTPS 域名。
+返回的 `login_url` 就是一次性链接，**15 分钟内有效，只能用一次**。
+
+> [!IMPORTANT]
+> 链接里的域名不是插件带的，是你自己在 `.env` 的 `X_LOGIN_PUBLIC_URL` 里填的那个，每个人不一样。**没有域名也能用**：把它设成 `http://127.0.0.1:6080`，然后在自己电脑上开 SSH 隧道 `ssh -L 6080:127.0.0.1:6080 root@你的服务器`，在本机浏览器打开链接即可。详见 [x-browser-service/README.md](x-browser-service/README.md) 的「没有域名：用 SSH 隧道」。
 
 **第二步，在链接里登录。** 打开链接 → 点「进入 X 登录窗口」→ 操作服务器上的 Chromium，正常输入账号密码、过验证码和二步验证。
 
