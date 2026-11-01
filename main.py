@@ -34,7 +34,6 @@ LEGACY_R18_FILE = "data/sensitive_words/r18.txt"
 BLOCK_NOTICE = "这个链接的内容包含屏蔽词，不予预览。"
 SEND_FAIL_NOTICE = "这张预览卡片发送失败（可能被 QQ 拦截了），请直接点链接查看。"
 REPLY_BLOCK_NOTICE = "（这条回复包含屏蔽词，已拦截）"
-X_SEARCH_CONFIG = "data/config/astrbot_plugin_x_search_config.json"
 
 
 class Blocked(Exception):
@@ -209,16 +208,9 @@ class LinkPreviewPlugin(Star):
     # ------------------------------------------------------------------ X 回复
 
     def _x_service(self):
-        """X 浏览器服务地址和 Token：优先用本插件配置，留空则读取本地保存的服务配置。"""
+        """X 浏览器服务地址和 Token，只认本插件的配置。"""
         url = str(self.config.get("x_browser_url", "") or "").strip()
         token = str(self.config.get("x_browser_token", "") or "").strip()
-        if not (url and token):
-            try:
-                xc = json.loads(Path(X_SEARCH_CONFIG).read_text(encoding="utf-8-sig"))
-                url = url or str(xc.get("browser_service_url", "") or "").strip()
-                token = token or str(xc.get("browser_service_token", "") or xc.get("login_service_token", "") or "").strip()
-            except (OSError, ValueError):
-                pass
         return (url, token) if url and len(token) >= 32 else (None, None)
 
     async def _x_replies_for(self, url, n, wait):

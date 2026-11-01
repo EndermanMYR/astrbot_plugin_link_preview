@@ -15,7 +15,7 @@ function saved() {
   remote.disconnect();
   finish.disabled = true;
   status.className = 'success';
-  status.textContent = '登录完成！Cookie 已保存在服务器，现在可以使用 X 搜索插件。';
+  status.textContent = '登录完成！Cookie 已保存在服务器，现在可以抓取 X 内容了。';
 }
 finish.addEventListener('click', async () => {
   finish.disabled = true;

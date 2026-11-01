@@ -220,15 +220,7 @@ docker compose up -d
 
 **不用手动从浏览器开发者工具复制 Cookie**。服务在服务器上自己开一个 Chromium，你在里面正常登录，登录成功后 Cookie 自动保存。
 
-**第一步，生成一次性登录链接。** 两种方式任选：
-
-方式 A：装过 X 搜索插件的，管理员私聊机器人发
-
-```
-/xlogin
-```
-
-方式 B：没装那个插件，直接调服务的接口（`X_LOGIN_SERVICE_TOKEN` 就是 `.env` 里那个）：
+**第一步，生成一次性登录链接。** 调服务的接口（`X_LOGIN_SERVICE_TOKEN` 就是 `.env` 里那个）：
 
 ```bash
 curl -s -X POST http://127.0.0.1:6080/api/session \
@@ -236,7 +228,7 @@ curl -s -X POST http://127.0.0.1:6080/api/session \
 # {"login_url": "https://xlogin.example.com/login/xxxxxxxx", "expires_in": 900}
 ```
 
-返回的 `login_url` 就是一次性链接，**15 分钟内有效，只能用一次**。
+返回的 `login_url` 就是一次性链接，**15 分钟内有效，只能用一次**。在服务器上执行用 `127.0.0.1:6080`，从外部调就换成你的 HTTPS 域名。
 
 **第二步，在链接里登录。** 打开链接 → 点「进入 X 登录窗口」→ 操作服务器上的 Chromium，正常输入账号密码、过验证码和二步验证。
 
@@ -251,7 +243,7 @@ data/plugin_data/<读取它的那个插件>/x_cookies.json
 具体路径由 `.env` 的 `ASTRBOT_COOKIE_DIR` 决定。文件里能看到 `auth_token` 和 `ct0` 两条就说明登录成功。
 
 > [!TIP]
-> 登录链接等于一次性的账号入口，别往群里发。用完就失效，想取消可以调 `POST /api/cancel` 或发 `/xlogin cancel`。
+> 登录链接等于一次性的账号入口，别往群里发。用完就失效，想中途取消可以调 `POST /api/cancel`。
 >
 > Cookie 会过期，X 改密码、踢设备、或者太久不用都可能失效。表现是评论突然变成空，重新走一遍上面的流程即可。
 

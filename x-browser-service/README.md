@@ -4,9 +4,17 @@
 
 下文按「已随插件放进 AstrBot 插件目录」的方式写路径，即 `data/plugins/astrbot_plugin_link_preview/x-browser-service`。放在别处时把 `cd` 换成实际目录即可，其余不变。
 
-Cookie 落在哪个目录由 `.env` 的 `ASTRBOT_COOKIE_DIR` 决定，填成实际读取 Cookie 的那个插件的数据目录即可。
+Cookie 落在哪个目录由 `.env` 的 `ASTRBOT_COOKIE_DIR` 决定，填一个会持久化的目录即可，两个容器共用这一份。
 
-部署后，AstrBot 管理员私聊机器人发送 `/xlogin`。机器人返回一个 15 分钟内有效的一次性链接。打开后点击“进入 X 登录窗口”，即可操作服务器上的 Chromium 浏览器，在真实的 X 登录页输入自己的账号、密码并完成验证码/二步验证。聊天软件的链接预览不会消耗登录链接。
+部署后调一次接口拿一次性登录链接（Token 就是 `.env` 里的 `X_LOGIN_SERVICE_TOKEN`）：
+
+```bash
+curl -s -X POST http://127.0.0.1:6080/api/session \
+  -H "Authorization: Bearer $X_LOGIN_SERVICE_TOKEN"
+# {"login_url": "https://xlogin.example.com/login/xxxxxxxx", "expires_in": 900}
+```
+
+打开返回的 `login_url`，点击“进入 X 登录窗口”，即可操作服务器上的 Chromium 浏览器，在真实的 X 登录页输入自己的账号、密码并完成验证码/二步验证。聊天软件的链接预览不会消耗登录链接。
 
 浏览器进入 X 首页且取得 `auth_token`、`ct0` 后，服务自动保存 Cookie 并关闭窗口。如果没有自动识别，登录完成后可点击“已完成登录，保存 Cookie”。无需在开发者工具里复制 Cookie。`/xlogin cancel` 关闭窗口并撤销链接。
 
@@ -38,7 +46,7 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 ```dotenv
 X_LOGIN_SERVICE_TOKEN=你的随机管理Token
 X_LOGIN_PUBLIC_URL=https://xlogin.example.com
-ASTRBOT_COOKIE_DIR=/opt/astrbot/data/plugin_data/astrbot_plugin_x_search
+ASTRBOT_COOKIE_DIR=/opt/astrbot/data/plugin_data/astrbot_plugin_link_preview
 LOGIN_UID=1000
 LOGIN_GID=1000
 X_BROWSER_PROXY=
@@ -49,9 +57,9 @@ X_BROWSER_PROXY=
 创建目录并赋予所配置用户写入权限，例如 UID/GID 均为 1000：
 
 ```bash
-mkdir -p /opt/astrbot/data/plugin_data/astrbot_plugin_x_search
-sudo chown 1000:1000 /opt/astrbot/data/plugin_data/astrbot_plugin_x_search
-chmod 700 /opt/astrbot/data/plugin_data/astrbot_plugin_x_search
+mkdir -p /opt/astrbot/data/plugin_data/astrbot_plugin_link_preview
+sudo chown 1000:1000 /opt/astrbot/data/plugin_data/astrbot_plugin_link_preview
+chmod 700 /opt/astrbot/data/plugin_data/astrbot_plugin_link_preview
 chmod 600 .env
 ```
 
@@ -97,7 +105,7 @@ location / {
 access_mode: web
 login_service_url: http://127.0.0.1:6080
 login_service_token: 与 .env 中 X_LOGIN_SERVICE_TOKEN 相同
-cookies_file: /opt/astrbot/data/plugin_data/astrbot_plugin_x_search/x_cookies.json
+cookies_file: /opt/astrbot/data/plugin_data/astrbot_plugin_link_preview/x_cookies.json
 ```
 
 AstrBot 在 Docker 中，可将它加入登录服务网络（`astrbot` 换成真实容器名）：
@@ -112,10 +120,10 @@ docker network connect astrbot-x-login astrbot
 access_mode: web
 login_service_url: http://x-login:6080
 login_service_token: 与 .env 中 X_LOGIN_SERVICE_TOKEN 相同
-cookies_file: /AstrBot/data/plugin_data/astrbot_plugin_x_search/x_cookies.json
+cookies_file: /AstrBot/data/plugin_data/astrbot_plugin_link_preview/x_cookies.json
 ```
 
-宿主机的共享目录映射给登录服务 `/cookies`，并通过 AstrBot 的原 data 挂载映射给 `/AstrBot/data/plugin_data/astrbot_plugin_x_search`。二者必须是同一个宿主机目录。Docker Compose 用户需把外部 `astrbot-x-login` 网络写进 AstrBot 的 Compose 配置，避免容器重建后丢掉手动加入的网络。
+宿主机的共享目录映射给登录服务 `/cookies`，并通过 AstrBot 的原 data 挂载映射给 `/AstrBot/data/plugin_data/astrbot_plugin_link_preview`。二者必须是同一个宿主机目录。Docker Compose 用户需把外部 `astrbot-x-login` 网络写进 AstrBot 的 Compose 配置，避免容器重建后丢掉手动加入的网络。
 
 保存配置并重载插件。管理员**私聊**：
 
