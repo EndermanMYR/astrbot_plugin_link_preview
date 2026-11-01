@@ -67,12 +67,17 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 
 ```dotenv
 X_LOGIN_SERVICE_TOKEN=你的随机管理Token
-X_LOGIN_PUBLIC_URL=https://xlogin.example.com
+# 留空 = 启动时自动探测公网 IP，登录地址形如 http://1.2.3.4:6080
+X_LOGIN_PUBLIC_URL=
+# 登录服务端口，改这里就够
+X_LOGIN_PORT=6080
 ASTRBOT_COOKIE_DIR=/opt/astrbot/data/plugin_data/astrbot_plugin_link_preview
 LOGIN_UID=1000
 LOGIN_GID=1000
 X_BROWSER_PROXY=
 ```
+
+`X_LOGIN_PORT` 改了之后，**插件的 `x_login_url` 要跟着改**（容器内仍是 `http://x-login:<端口>`），否则 `/x登录` 连不上。端口是 `docker compose` 直接映射的，改完 `docker compose up -d` 重建容器生效。
 
 `ASTRBOT_COOKIE_DIR` 是**宿主机上**的目录，必须位于 AstrBot 已经持久化挂载的 data 目录内。`LOGIN_UID`、`LOGIN_GID` 请设置成读取 Cookie 的 AstrBot 进程的用户 ID；容器内 AstrBot 使用 root 时可填写 `0`、`0`。普通部署可用 `id 运行AstrBot的用户名` 查看。服务自动保存的文件权限是 `0600`，读取者必须是同一个 UID 或 root。
 

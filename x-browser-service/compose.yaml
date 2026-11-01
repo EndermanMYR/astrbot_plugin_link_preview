@@ -7,11 +7,13 @@ services:
     user: "${LOGIN_UID:-1000}:${LOGIN_GID:-1000}"
     shm_size: 1gb
     ports:
-      - "127.0.0.1:6080:6080"
+      # 端口由 .env 的 X_LOGIN_PORT 决定；改了记得同步插件的 x_login_url
+      - "${X_LOGIN_PORT:-6080}:${X_LOGIN_PORT:-6080}"
     environment:
       X_LOGIN_SERVICE_TOKEN: ${X_LOGIN_SERVICE_TOKEN:?请在 .env 配置至少32字符的管理Token}
       # 留空则启动时自动探测公网 IP / 内网 IP，登录地址形如 http://<公网IP>:6080
       X_LOGIN_PUBLIC_URL: ${X_LOGIN_PUBLIC_URL:-}
+      X_LOGIN_PORT: ${X_LOGIN_PORT:-6080}
       X_BROWSER_PROXY: ${X_BROWSER_PROXY:-}
       X_COOKIE_FILE: /cookies/x_cookies.json
     volumes:
