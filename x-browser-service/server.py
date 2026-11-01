@@ -331,6 +331,7 @@ class LoginService:
             return web.json_response(
                 {
                     "login_url": self.public_url + "/login/" + session.ticket,
+                    "origins": sorted(self.origins),
                     "expires_in": self.ttl,
                 }
             )

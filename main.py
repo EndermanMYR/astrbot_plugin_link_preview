@@ -442,11 +442,14 @@ class LinkPreviewPlugin(Star):
             yield event.plain_result(f"登录服务返回异常：{data.get('error') or r.status_code}")
             return
         mins = max(1, int((data.get("expires_in") or 900) / 60))
-        yield event.plain_result(
-            f"一次性 X 登录链接（{mins} 分钟内有效，只能用一次）：\n{link}\n\n"
-            "打开后点「进入 X 登录窗口」，在服务器的浏览器里登录，"
-            "拿到 Cookie 后会自动保存并关窗。"
-        )
+        path = "/login/" + link.rsplit("/login/", 1)[-1]
+        # 同一个 ticket 换个主机名也能用，把内网/回环地址一并列出来
+        others = [f"{o}{path}" for o in (data.get("origins") or []) if o.rstrip("/") != link.rsplit(path, 1)[0]]
+        text = [f"一次性 X 登录链接（{mins} 分钟内有效，只能用一次）：", link]
+        if others:
+            text.append("\n备用地址（同一链接）：\n" + "\n".join(others))
+        text.append("\n打开后点「进入 X 登录窗口」，在服务器的浏览器里登录，拿到 Cookie 后会自动保存并关窗。")
+        yield event.plain_result("\n".join(text))
 
     @filter.command("预览帮助", alias={"previewhelp"})
     async def preview_help(self, event: AstrMessageEvent):
