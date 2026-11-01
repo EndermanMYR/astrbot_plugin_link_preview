@@ -18,6 +18,7 @@ from aiohttp import web
 from playwright.async_api import async_playwright
 
 COOKIE_FILE = os.environ.get("X_COOKIE_FILE", "/cookies/x_cookies.json")
+IG_COOKIE_FILE = os.environ.get("X_IG_COOKIE_FILE", "/cookies/ig_cookies.json")
 TOKEN = os.environ.get("X_LOGIN_SERVICE_TOKEN", "")
 PORT = int(os.environ.get("X_SCRAPER_PORT", "6081"))
 IDLE_SECONDS = int(os.environ.get("X_SCRAPER_IDLE", "600"))
@@ -347,6 +348,21 @@ def _iso(value: str) -> str:
         return str(value)
 
 
+def _load_ig_cookies() -> list[dict]:
+    """读 Instagram 的 Cookie（键值对形式），转成 Playwright 要的结构。"""
+    try:
+        raw = json.loads(open(IG_COOKIE_FILE, encoding="utf-8").read())
+    except (OSError, ValueError):
+        return []
+    jar = raw.get("cookies", raw) if isinstance(raw, dict) else {}
+    if not isinstance(jar, dict):
+        return []
+    return [
+        {"name": k, "value": v, "domain": ".instagram.com", "path": "/"}
+        for k, v in jar.items() if isinstance(v, str) and v
+    ]
+
+
 def _load_cookies() -> list[dict]:
     raw = json.loads(open(COOKIE_FILE, encoding="utf-8").read())
     out = []
@@ -411,10 +427,12 @@ class Browser:
 
     @staticmethod
     def _cookie_stamp_now():
-        try:
-            return os.path.getmtime(COOKIE_FILE)
-        except OSError:
-            return None
+        def mt(p):
+            try:
+                return os.path.getmtime(p)
+            except OSError:
+                return None
+        return (mt(COOKIE_FILE), mt(IG_COOKIE_FILE))
 
     async def _ensure(self):
         stamp = self._cookie_stamp_now()
@@ -436,6 +454,9 @@ class Browser:
             user_agent=USER_AGENT,
         )
         await self._ctx.add_cookies(_load_cookies())
+        ig = _load_ig_cookies()
+        if ig:
+            await self._ctx.add_cookies(ig)
         self._cookie_stamp = stamp
         if self._reaper is None:
             self._reaper = asyncio.create_task(self._reap())
@@ -510,6 +531,26 @@ class Browser:
                     await page.wait_for_timeout(settle * 2)
                     data = await page.evaluate(extract_js)
                 return data
+            finally:
+                await page.close()
+                self._last_used = time.monotonic()
+
+    async def ig_comments(self, url: str, count: int = 3):
+        """用登录态浏览器打开帖子页，等评论渲染后从 DOM 抓。"""
+        async with self._lock:
+            self._last_used = time.monotonic()
+            ctx = await self._ensure()
+            page = await ctx.new_page()
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+                if "/accounts/login" in page.url:
+                    raise RuntimeError("Instagram 登录态无效，请重新复制 Cookie")
+                try:
+                    await page.wait_for_selector("ul li time", timeout=20000)
+                except Exception:  # noqa: BLE001 - 没等到也按现有 DOM 抓
+                    pass
+                await page.wait_for_timeout(2500)
+                return await page.evaluate(IG_COMMENTS_JS, {"count": count})
             finally:
                 await page.close()
                 self._last_used = time.monotonic()
@@ -624,6 +665,44 @@ class Browser:
         return await self._retry(self._shot_once, args, kwargs)
 
 
+IG_COMMENTS_JS = r"""
+({count}) => {
+  const out = [];
+  const seen = new Set();
+  const SKIP = /^(Reply|回复|View replies|查看.*回复|See translation|翻译|likes?|赞|\d+[\d,.]*\s*(likes?|赞))$/i;
+  for (const li of document.querySelectorAll('ul li')) {
+    if (!li.querySelector('time')) continue;      // 评论和时间戳才带 time
+    let author = '';
+    for (const a of li.querySelectorAll('a[href]')) {
+      const h = a.getAttribute('href') || '';
+      if (/^\/[A-Za-z0-9_.]+\/$/.test(h)) {
+        const t = (a.innerText || '').trim();
+        if (t && !t.startsWith('#')) { author = t; break; }
+      }
+    }
+    let body = '';
+    for (const sp of li.querySelectorAll('span')) {
+      const v = (sp.innerText || '').trim();
+      if (!v || v === author || SKIP.test(v)) continue;
+      if (v.length > body.length) body = v;
+    }
+    if (!body) {
+      const lines = (li.innerText || '').split('\n').map(x => x.trim()).filter(Boolean);
+      if (lines.length > 1) body = lines.slice(1).join(' ');
+    }
+    body = (body || '').replace(/\s+/g, ' ').trim();
+    if (body.length < 2 || body === author) continue;
+    const key = author + '|' + body;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({author: author || null, text: body.slice(0, 300)});
+    if (out.length >= count) break;
+  }
+  return out;
+}
+"""
+
+
 BROWSER = Browser()
 
 
@@ -720,6 +799,40 @@ async def api_cookies(request):
     except OSError as e:
         return web.json_response({"error": f"写入失败：{e}"}, status=500)
     return web.json_response({"ok": True})
+
+
+async def api_ig_comments(request):
+    """Instagram 评论：用登录态浏览器渲染页面后抓 DOM，不走私有接口。"""
+    body = await request.json()
+    url = str(body.get("url", "")).strip()
+    count = max(1, min(int(body.get("count") or 3), 10))
+    if "instagram.com" not in url:
+        return web.json_response({"error": "需要 Instagram 链接"}, status=400)
+
+    cookie = str(body.get("cookie", "")).strip()
+    if cookie:
+        jar = {}
+        for part in cookie.split(";"):
+            if "=" in part:
+                k, v = part.split("=", 1)
+                if k.strip() and v.strip():
+                    jar[k.strip()] = v.strip()
+        if jar.get("sessionid"):
+            try:
+                os.makedirs(os.path.dirname(IG_COOKIE_FILE) or ".", exist_ok=True)
+                with open(IG_COOKIE_FILE, "w", encoding="utf-8") as f:
+                    json.dump(jar, f, indent=2)
+                os.chmod(IG_COOKIE_FILE, 0o600)
+            except OSError as e:
+                return web.json_response({"error": f"写入 IG Cookie 失败：{e}"}, status=500)
+
+    try:
+        items = await BROWSER.ig_comments(url, count)
+    except RuntimeError as e:
+        return web.json_response({"error": str(e)}, status=409)
+    except Exception as e:  # noqa: BLE001 - 页面结构变化不应让服务挂掉
+        return web.json_response({"error": f"{type(e).__name__}: {e}"}, status=500)
+    return web.json_response({"items": items})
 
 
 async def api_search(request):
@@ -870,6 +983,7 @@ def make_app():
     app = web.Application(middlewares=[errors, guard])
     app.router.add_get("/health", health)
     app.router.add_post("/api/cookies", api_cookies)
+    app.router.add_post("/api/ig_comments", api_ig_comments)
     app.router.add_post("/api/search", api_search)
     app.router.add_post("/api/user", api_user)
     app.router.add_post("/api/user_posts", api_user_posts)
