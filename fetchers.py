@@ -295,7 +295,7 @@ async def fetch_x(client, url):
 
 
 async def fetch_x_replies(service_url, token, tid, n=3, timeout=75):
-    """借 X 搜索插件的已登录浏览器服务，用 conversation_id 搜索拿热门回复。"""
+    """通过已登录的浏览器服务，用 conversation_id 搜索拿热门回复。"""
     async with httpx.AsyncClient(trust_env=False, timeout=timeout) as c:   # 服务在 Docker 内网，不走代理
         r = await c.post(service_url.rstrip("/") + "/api/search", headers={"Authorization": "Bearer " + token}, json={
             "query": f"conversation_id:{tid}", "count": max(n + 3, 6), "mode": "posts", "tab": "top",

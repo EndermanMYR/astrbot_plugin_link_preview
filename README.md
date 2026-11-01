@@ -63,7 +63,7 @@
 | YouTube | 标题、频道、简介、封面、时长、播放/点赞 | ✔ 热门评论 |
 | TikTok | 视频封面或图集、作者、播放/点赞/评论/分享/收藏 | ✔ 按点赞排序 |
 | Instagram | 帖子和 Reels 的作者、配文、图片（通过公开的嵌入修复站读取） | ✘ 需要登录 |
-| X / Twitter | 正文、作者、配图、引用帖、回复/转帖/喜欢/浏览 | ✔ 借用 X 搜索插件的已登录浏览器（较慢，自动预览最多等 15 秒） |
+| X / Twitter | 正文、作者、配图、引用帖、回复/转帖/喜欢/浏览 | ✔ 需配置 X 浏览器服务（较慢，自动预览最多等 15 秒） |
 | GitHub | 仓库、Issue、PR、用户主页 | ✔ Issue/PR 评论 |
 | Bluesky | 正文、作者、配图、互动数 | ✔ 按点赞排序的回复 |
 | pixiv | 标题、作者、标签、数据（R-18 不显示图片） | ✔ |
@@ -140,7 +140,7 @@ AstrBot WebUI -> 插件 -> 插件配置
 |--------|------|
 | `x_comments` | X 帖子也抓评论 |
 | `x_comments_wait` | 自动预览时 X 评论最多等几秒，默认 `15` |
-| `x_browser_url` / `x_browser_token` | X 浏览器服务地址和 Token；留空则读取 X 搜索插件的配置 |
+| `x_browser_url` / `x_browser_token` | X 浏览器服务地址和 Token（抓取 X 评论用） |
 
 ### 📖 维基全文
 
@@ -186,7 +186,6 @@ AstrBot WebUI -> 插件 -> 插件配置
 - 中文词去掉空格、间隔号、星号等插字后匹配；英文词按整词匹配
 - 正文、标题、作者命中：默认整条不发，也可以设成打码后发送；评论命中只去掉那一条
 - 按账号屏蔽：X 帖子作者的简介（和所在地）里带敏感词或 R18 词，不管这条帖子发的是什么都不预览
-- X 搜索插件的 `political_keywords_file` 指向同一个文件，两个插件共用一份词表
 - 维基 `/全文` 不做 R18 检查；机器人自己的回复默认也不查（`r18_outgoing`）
 
 ### 📤 发不出去时
@@ -268,7 +267,6 @@ asyncio.run(main())
 
 - 卡片渲染基于 [Playwright](https://playwright.dev/)
 - 抓取基于 [httpx](https://www.python-httpx.org/)，模板基于 [Jinja2](https://jinja.palletsprojects.com/)
-- X 评论借用 X 搜索插件提供的已登录浏览器服务
 
 ## 📜 许可证 | License
 

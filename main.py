@@ -21,10 +21,10 @@ HELP = """外链预览
 /全文 [维基链接]：把维基百科词条或维基文库作品的全文分页，合并转发发出（也可用 /维基全文）
 /预览图片 [开/关/默认]：管理员切换本群卡片是否显示配图和封面，不带参数查看当前状态
 /预览帮助：查看这条帮助
-能拿到评论的平台：YouTube、TikTok、X（借用 X 搜索插件的已登录浏览器，较慢）、GitHub Issue/PR、Bluesky、pixiv。Instagram、Reddit 拿不到评论。"""
+能拿到评论的平台：YouTube、TikTok、X（需配置 X 浏览器服务，较慢）、GitHub Issue/PR、Bluesky、pixiv。Instagram、Reddit 拿不到评论。"""
 
 PLUGIN_NAME = "astrbot_plugin_link_preview"
-# 和 X 搜索插件共用的敏感词表（相对 AstrBot 工作目录）
+# 敏感词表（相对 AstrBot 工作目录）
 DEFAULT_WORDS_FILE = "data/sensitive_words/political.txt"
 DEFAULT_R18_FILE = "data/sensitive_words/r18.txt"
 BLOCK_NOTICE = "这个链接的内容包含屏蔽词，不予预览。"
@@ -181,7 +181,7 @@ class LinkPreviewPlugin(Star):
     # ------------------------------------------------------------------ X 回复
 
     def _x_service(self):
-        """X 浏览器服务地址和 Token：优先用本插件配置，留空就读 X 搜索插件的配置。"""
+        """X 浏览器服务地址和 Token：优先用本插件配置，留空则读取本地保存的服务配置。"""
         url = str(self.config.get("x_browser_url", "") or "").strip()
         token = str(self.config.get("x_browser_token", "") or "").strip()
         if not (url and token):

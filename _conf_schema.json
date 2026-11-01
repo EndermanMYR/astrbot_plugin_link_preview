@@ -10,7 +10,7 @@
         "type": "object",
         "items": {
             "x": {
-                "description": "X / Twitter（接管 X 搜索插件的自动识别）",
+                "description": "X / Twitter",
                 "type": "bool",
                 "default": true
             },
@@ -117,7 +117,7 @@
         "description": "X 帖子也抓评论",
         "type": "bool",
         "default": true,
-        "hint": "借用 X 搜索插件的已登录浏览器搜索 conversation_id，单条要 10～30 秒"
+        "hint": "通过 X 浏览器服务搜索 conversation_id，单条要 10～30 秒"
     },
     "x_comments_wait": {
         "description": "自动预览时 X 评论最多等几秒",
@@ -129,13 +129,13 @@
         "description": "X 浏览器服务地址（可选）",
         "type": "string",
         "default": "",
-        "hint": "留空自动读取 X 搜索插件的配置"
+        "hint": "留空时插件会自动查找可用的服务配置"
     },
     "x_browser_token": {
         "description": "X 浏览器服务 Token（可选）",
         "type": "string",
         "default": "",
-        "hint": "留空自动读取 X 搜索插件的配置"
+        "hint": "留空时插件会自动查找可用的服务配置"
     },
     "max_links_per_message": {
         "description": "一条消息最多预览几个链接",
@@ -232,7 +232,7 @@
         "description": "敏感词表文件",
         "type": "string",
         "default": "data/sensitive_words/political.txt",
-        "hint": "相对 AstrBot 工作目录。文件不存在时会用插件自带的政治敏感词表创建；X 搜索插件也读这个文件。每行一个词，# 开头是注释，改完立即生效"
+        "hint": "相对 AstrBot 工作目录。文件不存在时会用插件自带的政治敏感词表创建。每行一个词，# 开头是注释，改完立即生效"
     },
     "block_words": {
         "description": "额外屏蔽词",
@@ -272,7 +272,7 @@
         "description": "R18 词表文件",
         "type": "string",
         "default": "data/sensitive_words/r18.txt",
-        "hint": "相对 AstrBot 工作目录；不存在时用插件自带的词表创建（合并了 X 搜索插件的内置词表和你配置里的词）。改完立即生效"
+        "hint": "相对 AstrBot 工作目录；不存在时用插件自带的词表创建（合并了插件内置词表和你在配置里维护的词）。改完立即生效"
     },
     "r18_words": {
         "description": "额外 R18 词",
