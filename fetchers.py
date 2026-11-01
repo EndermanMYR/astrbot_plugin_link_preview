@@ -1133,9 +1133,22 @@ def _ig_media_id(shortcode):
     return str(n) if n else None
 
 
-def _ig_sessionid(raw):
-    m = re.search(r"sessionid\s*[=:]\s*([^;,\s]+)", str(raw or ""))
-    return m.group(1) if m else None
+def _ig_cookies(raw):
+    """把粘贴的 Cookie 拆成键值对，IG 私有接口除了 sessionid 还要 csrftoken / ds_user_id。"""
+    text = str(raw or "").strip()
+    if not text:
+        return {}
+    if "=" not in text:                       # 只粘了 sessionid 的值
+        return {"sessionid": text} if re.fullmatch(r"[\w%\-]+", text) else {}
+    out = {}
+    for part in re.split(r";\s*", text):
+        if "=" not in part:
+            continue
+        k, v = part.split("=", 1)
+        k, v = k.strip(), v.strip()
+        if k and v and k.lower() not in {"path", "domain", "expires", "secure", "httponly", "samesite"}:
+            out[k] = v
+    return out
 
 
 async def fetch_instagram_comments(client, url, cookie, n=3):
@@ -1144,14 +1157,19 @@ async def fetch_instagram_comments(client, url, cookie, n=3):
     if not m:
         return []
     mid = _ig_media_id(m.group(2))
-    sid = _ig_sessionid(cookie)
-    if not mid or not sid:
+    jar = _ig_cookies(cookie)
+    if not mid or not jar.get("sessionid"):
         raise FetchError("instagram_cookie 里没找到可用的 sessionid")
+    headers = {"x-ig-app-id": IG_APP_ID,
+               "cookie": "; ".join(f"{k}={v}" for k, v in jar.items()),
+               "user-agent": IG_UA, "accept": "*/*",
+               "x-ig-www-claim": "0"}
+    if jar.get("csrftoken"):
+        headers["x-csrftoken"] = jar["csrftoken"]
     r = await client.get(
         f"https://i.instagram.com/api/v1/media/{mid}/comments/",
         params={"can_support_threading": "true", "permalink_enabled": "false"},
-        headers={"x-ig-app-id": IG_APP_ID, "cookie": f"sessionid={sid}",
-                 "user-agent": IG_UA, "accept": "*/*"},
+        headers=headers,
     )
     if r.status_code != 200:
         raise FetchError(f"Instagram HTTP {r.status_code}（sessionid 可能已失效）")
