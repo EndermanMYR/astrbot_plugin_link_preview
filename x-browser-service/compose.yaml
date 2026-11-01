@@ -10,7 +10,8 @@ services:
       - "127.0.0.1:6080:6080"
     environment:
       X_LOGIN_SERVICE_TOKEN: ${X_LOGIN_SERVICE_TOKEN:?请在 .env 配置至少32字符的管理Token}
-      X_LOGIN_PUBLIC_URL: ${X_LOGIN_PUBLIC_URL:?请在 .env 配置公开的HTTPS登录域名}
+      # 留空则启动时自动探测公网 IP / 内网 IP，登录地址形如 http://<公网IP>:6080
+      X_LOGIN_PUBLIC_URL: ${X_LOGIN_PUBLIC_URL:-}
       X_BROWSER_PROXY: ${X_BROWSER_PROXY:-}
       X_COOKIE_FILE: /cookies/x_cookies.json
     volumes:

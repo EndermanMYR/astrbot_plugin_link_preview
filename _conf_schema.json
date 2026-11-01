@@ -131,6 +131,12 @@
         "default": "",
         "hint": "留空时插件会自动查找可用的服务配置"
     },
+    "x_login_url": {
+        "description": "X 登录服务地址",
+        "type": "string",
+        "default": "http://x-login:6080",
+        "hint": "私聊发 /x登录 时用。默认是随插件分发的 compose 里的 x-login 服务；不部署就不用管"
+    },
     "x_browser_token": {
         "description": "X 浏览器服务 Token（可选）",
         "type": "string",

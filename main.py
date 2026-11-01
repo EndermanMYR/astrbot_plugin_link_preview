@@ -8,6 +8,8 @@ import shutil
 import time
 from pathlib import Path
 
+import httpx
+
 import astrbot.api.message_components as Comp
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
@@ -22,6 +24,7 @@ HELP = """外链预览
 /全文 [维基链接]：把维基百科词条或维基文库作品的全文分页，合并转发发出（也可用 /维基全文）
 /预览图片 [开/关/默认]：管理员切换本群卡片是否显示配图和封面，不带参数查看当前状态
 /预览帮助：查看这条帮助
+/x登录：私聊我，拿一个一次性 X 登录链接（在服务器浏览器里登录，自动保存 Cookie）
 能拿到评论的平台：YouTube、TikTok、X（需配置 X 浏览器服务，较慢）、GitHub Issue/PR、Bluesky、pixiv。Instagram、Reddit 拿不到评论。"""
 
 PLUGIN_NAME = "astrbot_plugin_link_preview"
@@ -414,6 +417,36 @@ class LinkPreviewPlugin(Star):
             event.stop_event()
 
     # ------------------------------------------------------------------ 指令
+
+    @filter.command("x登录", alias={"xlogin", "登录x"})
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    async def xlogin_cmd(self, event: AstrMessageEvent):
+        """私聊拿一次性 X 登录链接：服务在服务器上开浏览器，登录完自动存 Cookie。"""
+        if event.get_group_id():
+            yield event.plain_result("请私聊我发 /x登录，登录链接不能发到群里。")
+            return
+        url = str(self.config.get("x_login_url", "") or "").strip().rstrip("/")
+        token = str(self.config.get("x_browser_token", "") or "").strip()
+        if not url or len(token) < 32:
+            yield event.plain_result("还没配置 X 登录服务：请在插件配置里填 x_login_url 和 x_browser_token。")
+            return
+        try:
+            async with httpx.AsyncClient(trust_env=False, timeout=120) as c:
+                r = await c.post(url + "/api/session", headers={"Authorization": "Bearer " + token})
+            data = r.json() if "json" in r.headers.get("content-type", "") else {}
+        except Exception as e:
+            yield event.plain_result(f"登录服务连不上：{e}")
+            return
+        link = data.get("login_url")
+        if r.status_code != 200 or not link:
+            yield event.plain_result(f"登录服务返回异常：{data.get('error') or r.status_code}")
+            return
+        mins = max(1, int((data.get("expires_in") or 900) / 60))
+        yield event.plain_result(
+            f"一次性 X 登录链接（{mins} 分钟内有效，只能用一次）：\n{link}\n\n"
+            "打开后点「进入 X 登录窗口」，在服务器的浏览器里登录，"
+            "拿到 Cookie 后会自动保存并关窗。"
+        )
 
     @filter.command("预览帮助", alias={"previewhelp"})
     async def preview_help(self, event: AstrMessageEvent):

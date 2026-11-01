@@ -4,9 +4,12 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import secrets
+import socket
 import tempfile
 import time
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -14,6 +17,52 @@ from urllib.parse import urlsplit
 from aiohttp import WSMsgType, web
 
 COOKIE_NAME = "x_login_session"
+DEFAULT_PORT = 6080
+IP_RE = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}")
+
+
+def _lan_ips():
+    """本机内网 IP，连一下外网地址拿出口网卡的那个。"""
+    ips = []
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.connect(("8.8.8.8", 80))
+            ips.append(sock.getsockname()[0])
+        finally:
+            sock.close()
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ips.append(info[4][0])
+    except OSError:
+        pass
+    return [ip for ip in dict.fromkeys(ips) if ip and not ip.startswith("127.")]
+
+
+def _public_ip(timeout=4):
+    """问外部服务要公网 IP；全都失败就返回 None。"""
+    for url in ("https://api.ipify.org", "https://ifconfig.me/ip", "https://ipinfo.io/ip"):
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as resp:
+                ip = resp.read(64).decode("utf-8", "ignore").strip()
+            if IP_RE.fullmatch(ip):
+                return ip
+        except Exception:
+            continue
+    return None
+
+
+def detect_origins(port=DEFAULT_PORT):
+    """列出本机可能的访问来源：回环、内网、公网。第一个公网/内网地址作为默认登录地址。"""
+    hosts = ["127.0.0.1", "localhost"] + _lan_ips()
+    public = _public_ip()
+    if public:
+        hosts.append(public)
+    origins = [f"http://{h}:{port}" for h in dict.fromkeys(hosts)]
+    preferred = f"http://{public}:{port}" if public else origins[2] if len(origins) > 2 else origins[0]
+    return origins, preferred
 
 
 def extract_cookies(values):
@@ -136,25 +185,35 @@ class LoginService:
         ttl=900,
         novnc_dir="/opt/novnc",
         vnc_port=5900,
+        port=DEFAULT_PORT,
     ):
         if len(admin_token) < 32 or admin_token.startswith("replace-with-"):
             raise ValueError("登录服务管理 Token 至少 32 个字符")
-        url = urlsplit(public_url)
-        if (
-            url.scheme not in {"http", "https"}
-            or not url.hostname
-            or url.username
-            or url.password
-            or url.path not in {"", "/"}
-            or url.query
-            or url.fragment
-        ):
-            raise ValueError("公开地址需为完整的域名根地址")
-        if url.scheme != "https" and url.hostname not in {"localhost", "127.0.0.1"}:
-            raise ValueError("公开登录地址必须使用 HTTPS")
         self.admin_token = admin_token
-        self.public_url = public_url.rstrip("/")
-        self.secure_cookie = url.scheme == "https"
+        public_url = str(public_url or "").strip()
+        if public_url:
+            url = urlsplit(public_url)
+            if (
+                url.scheme not in {"http", "https"}
+                or not url.hostname
+                or url.username
+                or url.password
+                or url.path not in {"", "/"}
+                or url.query
+                or url.fragment
+            ):
+                raise ValueError("公开地址需为完整的域名根地址")
+            self.public_url = public_url.rstrip("/")
+            self.origins = {self.public_url}
+        else:
+            # 没配就自己探：回环 / 内网 / 公网，登录地址优先用公网那个
+            self.origins, self.public_url = detect_origins(port)
+            print(f"[x-login] 未配置 X_LOGIN_PUBLIC_URL，自动探测登录地址：{self.public_url}", flush=True)
+            print(f"[x-login] 接受来源：{', '.join(sorted(self.origins))}", flush=True)
+        self.secure_cookie = self.public_url.startswith("https")
+        if not self.secure_cookie and urlsplit(self.public_url).hostname not in {"127.0.0.1", "localhost"}:
+            print("[x-login] 警告：登录页走明文 HTTP，账号密码不加密。"
+                  "仅建议内网或 SSH 隧道下使用，公网请配 HTTPS 域名。", flush=True)
         self.cookie_path = cookie_path
         self.runtime_factory = runtime_factory or RemoteBrowser
         self.ttl = max(30, min(1800, ttl))
@@ -226,7 +285,7 @@ class LoginService:
         return session
 
     def origin(self, request):
-        if request.headers.get("Origin") != self.public_url:
+        if request.headers.get("Origin") not in self.origins:
             raise web.HTTPForbidden(text="来源不匹配")
 
     async def health(self, request):
@@ -449,6 +508,7 @@ class LoginService:
 
 
 def main():
+    port = int(os.environ.get("X_LOGIN_PORT", DEFAULT_PORT))
     service = LoginService(
         os.environ.get("X_LOGIN_SERVICE_TOKEN", ""),
         os.environ.get("X_LOGIN_PUBLIC_URL", ""),
@@ -456,8 +516,9 @@ def main():
         runtime_factory=lambda: RemoteBrowser(
             proxy=os.environ.get("X_BROWSER_PROXY", "")
         ),
+        port=port,
     )
-    web.run_app(service.app(), host="0.0.0.0", port=6080, access_log=None)
+    web.run_app(service.app(), host="0.0.0.0", port=port, access_log=None)
 
 
 if __name__ == "__main__":
