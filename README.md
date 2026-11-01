@@ -92,13 +92,31 @@ AstrBot/data/plugins/astrbot_plugin_link_preview
 
 重启 AstrBot 后即可在 WebUI 中看到插件。
 
-容器需要 Chromium 的系统依赖，否则渲染会一路退回文转图：
+### 🖥️ 渲染需要什么
+
+卡片用无头浏览器截图，**不需要 Docker**，也不需要装系统依赖。按这个顺序找浏览器，第一个能用的就用：
+
+1. `browser_path` 指定的可执行文件
+2. `browser_channel` 指定的通道（`chrome` / `msedge` / `chromium`）
+3. `auto` 模式下自动找系统已装的 Chrome / Edge / Chromium
+4. Playwright 自带的 Chromium
+
+所以**只要机器上本来就有 Chrome 或 Edge，`pip install playwright` 之后直接就能出图**，不用跑 `playwright install chromium`，更不用装 Docker。
 
 ```bash
-python -m playwright install-deps chromium
-# emoji 显示需要
-apt install -y fonts-noto-color-emoji
+pip install -r requirements.txt   # httpx / jinja2 / playwright
 ```
+
+想让插件用自带 Chromium 而不是系统浏览器（比如容器里已经装好）：
+
+```bash
+python -m playwright install chromium
+```
+
+`browser_channel` 设成 `playwright` 即只用自带的那份。
+
+> [!NOTE]
+> 全都找不到时，会退回 AstrBot 自带的文转图服务，排版会有差异。容器里还缺 emoji 字体的话，`apt install -y fonts-noto-color-emoji`。
 
 ## ⚙️ 配置 | Configuration
 
@@ -128,6 +146,8 @@ AstrBot WebUI -> 插件 -> 插件配置
 | `show_images` | 显示配图和封面 |
 | `blur_sensitive` | 平台标记为敏感的图片自动模糊 |
 | `comment_count` | 卡片里显示几条热门评论，默认 `3`，最大 `10` |
+| `browser_channel` | 浏览器来源：`auto` / `chrome` / `msedge` / `chromium` / `playwright` |
+| `browser_path` | 浏览器可执行文件路径，填了优先用这个 |
 
 ### 🌐 网络与抓取
 

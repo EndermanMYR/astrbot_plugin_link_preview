@@ -66,7 +66,8 @@ class LinkPreviewPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
-        self.renderer = render.Renderer()
+        self.renderer = render.Renderer(self.config.get("browser_channel", "auto"),
+                                        self.config.get("browser_path", ""))
         self.data_dir = Path(StarTools.get_data_dir(PLUGIN_NAME))
         self.cache_dir = self.data_dir / "cards"
         self.cache_dir.mkdir(parents=True, exist_ok=True)

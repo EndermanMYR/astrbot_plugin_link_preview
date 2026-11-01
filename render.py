@@ -2,10 +2,19 @@
 
 import asyncio
 import base64
+import os
+import sys
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 import jinja2
+
+try:                      # 插件里跑用 AstrBot 的 logger；单独跑脚本时退回标准库
+    from astrbot.api import logger
+except Exception:         # pragma: no cover - 只在本机调试时走到
+    import logging
+
+    logger = logging.getLogger(__name__)
 
 TEMPLATE = Path(__file__).parent / "templates" / "card.html"
 
@@ -102,14 +111,62 @@ def build_html(card, theme="dark"):
     return tpl.render(c=card, theme="light" if theme == "light" else "dark")
 
 
+# 常见系统浏览器的安装位置：没装 Playwright 自带 Chromium 时按顺序试
+SYSTEM_BROWSERS = {
+    "win32": [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    ],
+    "darwin": [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    ],
+    "linux": [
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/microsoft-edge",
+    ],
+}
+
+LAUNCH_ARGS = ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--disable-extensions"]
+
+
+def launch_options(channel="auto", path=""):
+    """按优先级列出浏览器启动方式。
+
+    指定路径 > 指定通道（chrome/msedge/chromium）> 自动找系统浏览器 > Playwright 自带的。
+    这样机器上只要有 Chrome/Edge 就能渲染，不必装 Docker，也不用跑 playwright install-deps。
+    """
+    out = []
+    path = str(path or "").strip()
+    if path:
+        out.append({"executable_path": path})
+    ch = str(channel or "auto").strip().lower()
+    if ch in ("chrome", "msedge", "chromium"):
+        out.append({"channel": ch})
+    elif ch == "auto":
+        for p in SYSTEM_BROWSERS.get(sys.platform, SYSTEM_BROWSERS["linux"]):
+            if os.path.exists(p):
+                out.append({"executable_path": p})
+    out.append({})        # 兜底：Playwright 自带的 Chromium
+    return out
+
+
 class Renderer:
     """复用同一个无头浏览器；同时最多渲染两张。"""
 
-    def __init__(self):
+    def __init__(self, channel="auto", path=""):
         self._pw = None
         self._browser = None
         self._lock = asyncio.Lock()
         self._sem = asyncio.Semaphore(2)
+        self._options = launch_options(channel, path)
+        self._current = None
 
     async def _ensure(self):
         async with self._lock:
@@ -119,10 +176,22 @@ class Renderer:
 
             if self._pw is None:
                 self._pw = await async_playwright().start()
-            self._browser = await self._pw.chromium.launch(
-                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
-            )
-            return self._browser
+            # 上次成功的那个优先重试，失败再按顺序降级
+            order = ([self._current] if self._current else []) + [
+                o for o in self._options if o != self._current
+            ]
+            last = None
+            for opt in order:
+                try:
+                    self._browser = await self._pw.chromium.launch(args=LAUNCH_ARGS, **opt)
+                    if opt != self._current:
+                        logger.info(f"[LinkPreview] 浏览器已启动：{opt or 'Playwright 自带 Chromium'}")
+                    self._current = opt
+                    return self._browser
+                except Exception as e:
+                    last = e
+                    logger.debug(f"[LinkPreview] 启动方式不可用 {opt}：{e}")
+            raise RuntimeError(f"没有可用的浏览器：{last}")
 
     async def render(self, html, out_path, timeout=25):
         browser = await self._ensure()

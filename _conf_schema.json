@@ -201,6 +201,19 @@
         "default": "",
         "hint": "不填每小时只能查 60 次"
     },
+    "browser_channel": {
+        "description": "浏览器来源",
+        "type": "string",
+        "options": ["auto", "chrome", "msedge", "chromium", "playwright"],
+        "default": "auto",
+        "hint": "auto 先找系统已装的 Chrome/Edge，找不到再用 Playwright 自带的 Chromium。机器上有浏览器就能渲染，不用 Docker、不用 playwright install-deps"
+    },
+    "browser_path": {
+        "description": "浏览器可执行文件路径（可选）",
+        "type": "string",
+        "default": "",
+        "hint": "填了就优先用这个，比如 C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+    },
     "steam_api_key": {
         "description": "Steam Web API Key（可选）",
         "type": "string",
