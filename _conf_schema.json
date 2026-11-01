@@ -122,7 +122,7 @@
     "x_comments_wait": {
         "description": "自动预览时 X 评论最多等几秒",
         "type": "int",
-        "default": 15,
+        "default": 20,
         "hint": "超时先发不带评论的卡片，后台抓到的评论留给 /评论 指令用"
     },
     "x_browser_url": {

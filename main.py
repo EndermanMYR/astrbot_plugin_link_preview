@@ -277,13 +277,14 @@ class LinkPreviewPlugin(Star):
                 logger.info(f"[LinkPreview] X 回复获取失败 {tid}：{e}")
                 return []
             self._x_replies[tid] = (time.time(), rows)
+            logger.info(f"[LinkPreview] X 回复 {tid} 抓到 {len(rows)} 条")
             return rows
 
         task = asyncio.ensure_future(job())
         try:
             rows = await asyncio.wait_for(asyncio.shield(task), wait)
         except asyncio.TimeoutError:
-            logger.info(f"[LinkPreview] X 回复 {wait} 秒内没抓完，先发不带评论的卡片")
+            logger.warning(f"[LinkPreview] X 回复 {wait} 秒内没抓完，先发不带评论的卡片（后台会继续抓，稍后 /评论 能看）")
             return []
         return rows[:n]
 
