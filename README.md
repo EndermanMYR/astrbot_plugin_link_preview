@@ -216,6 +216,7 @@ AstrBot WebUI -> 插件 -> 插件配置
 | `x_comments` | X 帖子也抓评论 |
 | `x_comments_wait` | 自动预览时 X 评论最多等几秒，默认 `15` |
 | `x_browser_url` / `x_browser_token` | X 浏览器服务地址和 Token（抓取 X 评论用） |
+| `x_cookie` | 手动填的 Cookie（可选），填了就不用走登录链接 |
 
 X 卡片本身走公开接口，不需要登录；只有「热门评论」需要一台登录过 X 的浏览器。这套服务已经随插件放在 [`x-browser-service/`](x-browser-service/README.md)，用 Docker 起两个容器即可：
 
@@ -227,7 +228,20 @@ docker compose up -d
 
 部署完把地址和 Token 填进 `x_browser_url` / `x_browser_token`。不部署也不影响其他平台，只是 X 卡片没有评论。
 
-#### 🔑 Cookie 怎么来：走一次性登录链接
+#### 🔑 Cookie 怎么来：两种方式
+
+**方式一（推荐）：一次性登录链接** —— 服务在服务器上开浏览器，你登录完自动保存，不用碰开发者工具。
+**方式二：手动填 Cookie** —— 已经有 Cookie 的（比如从自己浏览器导出的），直接粘到配置项 `x_cookie`。
+
+两种方式互不影响：填了 `x_cookie` 就在插件加载时写进抓取服务，留空就走登录链接。
+
+> [!TIP]
+> 手动填的格式：从浏览器开发者工具 → Application → Cookies → `x.com`，复制 `auth_token` 和 `ct0` 两行，拼成
+> `auth_token=xxxx; ct0=yyyy` 粘进去即可。只粘两条值（用分号或空格隔开）也认。
+>
+> 注意 `ct0` 很长（约 160 字符），别复制漏了。改完配置要重载插件或重启 AstrBot 才生效。
+
+#### 🔑 方式一：走一次性登录链接
 
 **不用手动从浏览器开发者工具复制 Cookie**。服务在服务器上自己开一个 Chromium，你在里面正常登录，登录成功后 Cookie 自动保存。
 
