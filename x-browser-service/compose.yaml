@@ -11,7 +11,8 @@ services:
       X_LOGIN_SERVICE_TOKEN: ${X_LOGIN_SERVICE_TOKEN:?请在 .env 配置至少 32 字符的 Token}
       X_COOKIE_FILE: /cookies/x_cookies.json
       # 空闲这么久没有请求就关掉浏览器，把内存还给系统
-      X_SCRAPER_IDLE: ${X_SCRAPER_IDLE:-300}
+      # 空闲多久关掉浏览器。调大能减少冷启动（冷启动要多花 8~10 秒），代价是常驻内存
+      X_SCRAPER_IDLE: ${X_SCRAPER_IDLE:-1800}
     volumes:
       - ${ASTRBOT_COOKIE_DIR:?请在 .env 配置 Cookie 目录的绝对路径}:/cookies
     networks:
