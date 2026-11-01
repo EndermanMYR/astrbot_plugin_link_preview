@@ -301,12 +301,19 @@ async def fetch_x(client, url):
     )
 
 
-async def fetch_x_replies(service_url, token, tid, n=3, timeout=75):
-    """通过已登录的浏览器服务，用 conversation_id 搜索拿热门回复。"""
+async def fetch_x_replies(service_url, token, tid, n=3, timeout=75, budget=25):
+    """通过已登录的浏览器服务，用 conversation_id 搜索拿热门回复。
+
+    budget 是这次愿意花的总秒数，同时决定插件等多久和服务端页面等多久，
+    调小 = 出卡快但可能抓不全，调大 = 更完整但更慢。
+    """
+    budget = max(5, int(budget))
+    ready_ms = max(4000, budget * 1000 - 2500)      # 留 2.5 秒给渲染和传输
+    settle_ms = 1200 if budget >= 18 else 700
     async with httpx.AsyncClient(trust_env=False, timeout=timeout) as c:   # 服务在 Docker 内网，不走代理
         r = await c.post(service_url.rstrip("/") + "/api/search", headers={"Authorization": "Bearer " + token}, json={
             "query": f"conversation_id:{tid}", "count": max(n + 3, 6), "mode": "posts", "tab": "top",
-            "ready_timeout_ms": 25000, "settle_ms": 1200,
+            "ready_timeout_ms": ready_ms, "settle_ms": settle_ms,
         })
     data = r.json() if "json" in r.headers.get("content-type", "") else {}
     if r.status_code != 200:

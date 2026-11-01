@@ -272,7 +272,7 @@ class LinkPreviewPlugin(Star):
 
         async def job():
             try:
-                rows = await fetchers.fetch_x_replies(service, token, tid, max(n, 10))
+                rows = await fetchers.fetch_x_replies(service, token, tid, max(n, 10), budget=wait)
             except Exception as e:
                 logger.info(f"[LinkPreview] X 回复获取失败 {tid}：{e}")
                 return []
