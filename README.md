@@ -4,6 +4,7 @@
 ![AstrBot](https://img.shields.io/badge/AstrBot-v4.16%2B-brightgreen)
 ![Platform](https://img.shields.io/badge/平台-QQ%20%7C%20OneBot-12B7F5)
 ![Render](https://img.shields.io/badge/渲染-Playwright%20Chromium-2EAD33)
+![License](https://img.shields.io/badge/License-MIT-yellow)
 
 ## ✅ 简介 | Introduction
 
@@ -271,4 +272,6 @@ asyncio.run(main())
 
 ## 📜 许可证 | License
 
-本仓库尚未添加 `LICENSE` 文件。在补充之前，默认保留所有权利；如需转载或二次分发，请先开 issue 联系作者。
+本项目基于 [MIT License](LICENSE) 发布，可自由使用、修改和分发，保留版权声明即可。
+
+[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
