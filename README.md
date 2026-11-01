@@ -142,6 +142,16 @@ AstrBot WebUI -> 插件 -> 插件配置
 | `x_comments_wait` | 自动预览时 X 评论最多等几秒，默认 `15` |
 | `x_browser_url` / `x_browser_token` | X 浏览器服务地址和 Token（抓取 X 评论用） |
 
+X 卡片本身走公开接口，不需要登录；只有「热门评论」需要一台登录过 X 的浏览器。这套服务已经随插件放在 [`x-browser-service/`](x-browser-service/README.md)，用 Docker 起两个容器即可：
+
+```bash
+cd x-browser-service
+cp .env.example .env      # 填管理 Token 和 HTTPS 登录域名
+docker compose up -d
+```
+
+部署完把地址和 Token 填进 `x_browser_url` / `x_browser_token`。不部署也不影响其他平台，只是 X 卡片没有评论。
+
 ### 📖 维基全文
 
 | 配置项 | 说明 |

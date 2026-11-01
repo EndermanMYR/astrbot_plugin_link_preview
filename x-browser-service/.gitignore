@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.env
+.DS_Store
+
+# 登录产生的 Cookie 数据，任何情况下都不要提交
+x_cookies.json
+*cookie*.json
+cookies/
