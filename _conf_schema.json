@@ -131,17 +131,17 @@
         "default": "",
         "hint": "留空时插件会自动查找可用的服务配置"
     },
+    "instagram_cookie": {
+        "description": "Instagram Cookie（可选）",
+        "type": "string",
+        "default": "",
+        "hint": "填了才能抓 Instagram 评论：从浏览器开发者工具复制 instagram.com 的 sessionid 值，粘贴 sessionid=xxx 即可。不填则 Instagram 卡片只有正文和配图"
+    },
     "x_cookie": {
         "description": "手动填 X Cookie（可选）",
         "type": "string",
         "default": "",
         "hint": "不想走浏览器登录时用：从浏览器开发者工具复制 Cookie，粘贴 auth_token=...; ct0=... 这一整段即可。填了会在插件加载时自动写入抓取服务，留空则用登录链接方式"
-    },
-    "x_login_url": {
-        "description": "X 登录服务地址",
-        "type": "string",
-        "default": "http://x-login:6080",
-        "hint": "私聊发 /x登录 时用。默认是随插件分发的 compose 里的 x-login 服务；不部署就不用管"
     },
     "x_browser_token": {
         "description": "浏览器服务 Token（可选）",

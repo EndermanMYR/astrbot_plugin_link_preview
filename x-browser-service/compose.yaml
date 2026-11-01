@@ -1,46 +1,22 @@
 services:
-  x-login:
-    build: .
-    image: remote_login-x-login:latest
-    restart: unless-stopped
-    init: true
-    user: "${LOGIN_UID:-1000}:${LOGIN_GID:-1000}"
-    shm_size: 1gb
-    ports:
-      # 默认只绑本机，靠 cloudflared / Nginx 反代对外；要直连公网把 X_LOGIN_BIND 改成 0.0.0.0
-      - "${X_LOGIN_BIND:-127.0.0.1}:${X_LOGIN_PORT:-6080}:${X_LOGIN_PORT:-6080}"
-    environment:
-      X_LOGIN_SERVICE_TOKEN: ${X_LOGIN_SERVICE_TOKEN:?请在 .env 配置至少32字符的管理Token}
-      # 留空则启动时自动探测公网 IP / 内网 IP，登录地址形如 http://<公网IP>:6080
-      X_LOGIN_PUBLIC_URL: ${X_LOGIN_PUBLIC_URL:-}
-      X_LOGIN_PORT: ${X_LOGIN_PORT:-6080}
-      X_BROWSER_PROXY: ${X_BROWSER_PROXY:-}
-      X_COOKIE_FILE: /cookies/x_cookies.json
-    volumes:
-      - ${ASTRBOT_COOKIE_DIR:?请在 .env 配置AstrBot的Cookie目录绝对路径}:/cookies
-    networks:
-      - xlogin
-  # 插件 browser 模式的抓取后端：复用同一个 Chromium 镜像，只跑抓取接口。
-  # 服务名不用 x- 前缀，避免与 Compose 的 x-* 扩展字段规则纠缠。
-  # 这里不写 build：由 x-login 负责构建同一个镜像，两个服务同时 build 同名镜像会冲突。
   xbrowser:
-    image: remote_login-x-login:latest
+    build: .
+    image: astrbot-xbrowser:latest
     restart: unless-stopped
     init: true
     user: "${LOGIN_UID:-1000}:${LOGIN_GID:-1000}"
-    # Chromium 以 --disable-dev-shm-usage 运行，共享内存用不到 1G，小内存机器省一点。
+    # Chromium 用 --disable-dev-shm-usage，共享内存不需要很大
     shm_size: 256mb
-    entrypoint: ["python", "/app/scraper.py"]
     environment:
-      X_LOGIN_SERVICE_TOKEN: ${X_LOGIN_SERVICE_TOKEN:?请在 .env 配置至少32字符的管理Token}
+      X_LOGIN_SERVICE_TOKEN: ${X_LOGIN_SERVICE_TOKEN:?请在 .env 配置至少 32 字符的 Token}
       X_COOKIE_FILE: /cookies/x_cookies.json
-      # 空闲这么久没有请求就关掉浏览器，把内存还给系统。
+      # 空闲这么久没有请求就关掉浏览器，把内存还给系统
       X_SCRAPER_IDLE: ${X_SCRAPER_IDLE:-300}
     volumes:
-      - ${ASTRBOT_COOKIE_DIR:?请在 .env 配置AstrBot的Cookie目录绝对路径}:/cookies
+      - ${ASTRBOT_COOKIE_DIR:?请在 .env 配置 Cookie 目录的绝对路径}:/cookies
     networks:
       - xlogin
 networks:
-  # 键名不能以 x- 开头：Compose 会把 x-* 当扩展字段忽略，导致 "undefined network"。
+  # 键名不能以 x- 开头：Compose 会把 x-* 当扩展字段忽略
   xlogin:
     name: astrbot-x-login

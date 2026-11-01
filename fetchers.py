@@ -1109,6 +1109,63 @@ async def fetch_instagram(client, url):
 
 # ---------------------------------------------------------------------------
 # Dailymotion / niconico
+IG_APP_ID = "936619743392459"
+IG_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+IG_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+         "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+
+
+def _ig_media_id(shortcode):
+    """短码转媒体 ID：Instagram 用的 64 进制，字符表是大小写字母加数字和 -_。"""
+    n = 0
+    for ch in str(shortcode or ""):
+        idx = IG_ALPHABET.find(ch)
+        if idx < 0:
+            return None
+        n = n * 64 + idx
+    return str(n) if n else None
+
+
+def _ig_sessionid(raw):
+    m = re.search(r"sessionid\s*[=:]\s*([^;,\s]+)", str(raw or ""))
+    return m.group(1) if m else None
+
+
+async def fetch_instagram_comments(client, url, cookie, n=3):
+    """用浏览器里的 sessionid 调私有接口拿评论。"""
+    m = next(pat for key, pat in LINK_PATTERNS if key == "instagram").match(url)
+    if not m:
+        return []
+    mid = _ig_media_id(m.group(2))
+    sid = _ig_sessionid(cookie)
+    if not mid or not sid:
+        raise FetchError("instagram_cookie 里没找到可用的 sessionid")
+    r = await client.get(
+        f"https://i.instagram.com/api/v1/media/{mid}/comments/",
+        params={"can_support_threading": "true", "permalink_enabled": "false"},
+        headers={"x-ig-app-id": IG_APP_ID, "cookie": f"sessionid={sid}",
+                 "user-agent": IG_UA, "accept": "*/*"},
+    )
+    if r.status_code != 200:
+        raise FetchError(f"Instagram HTTP {r.status_code}（sessionid 可能已失效）")
+    data = r.json() if "json" in r.headers.get("content-type", "") else {}
+    out = []
+    for c in data.get("comments") or []:
+        text = (c.get("text") or "").strip()
+        if not text:
+            continue
+        u = c.get("user") or {}
+        out.append({
+            "author": u.get("full_name") or u.get("username"),
+            "text": text,
+            "likes": compact(c.get("comment_like_count")) if c.get("comment_like_count") else None,
+            "time": fmt_time(c.get("created_at")),
+        })
+        if len(out) >= n:
+            break
+    return out
+
+
 # ---------------------------------------------------------------------------
 
 async def fetch_dailymotion(client, url):
@@ -1183,10 +1240,11 @@ async def fetch_oembed(client, platform, url):
 
 
 # 能拿到评论的平台（X、Reddit 不登录拿不到；Steam 评测接口会拦服务器）
-COMMENT_PLATFORMS = {"youtube", "github", "bluesky", "pixiv", "tiktok", "x", "steam"}
+COMMENT_PLATFORMS = {"youtube", "github", "bluesky", "pixiv", "tiktok", "x", "steam", "instagram"}
 
 
-async def fetch(client, platform, url, github_token=None, comments=0, steam_api_key=None):
+async def fetch(client, platform, url, github_token=None, comments=0,
+                steam_api_key=None, instagram_cookie=None):
     if platform == "x":
         return await fetch_x(client, url)
     if platform == "youtube":
@@ -1208,7 +1266,13 @@ async def fetch(client, platform, url, github_token=None, comments=0, steam_api_
     if platform == "tiktok":
         return await fetch_tiktok(client, url, comments)
     if platform == "instagram":
-        return await fetch_instagram(client, url)
+        c = await fetch_instagram(client, url)
+        if comments and instagram_cookie:
+            try:
+                c["comments"] = await fetch_instagram_comments(client, url, instagram_cookie, comments)
+            except (FetchError, httpx.HTTPError, ValueError):
+                c["comments"] = []
+        return c
     if platform == "dailymotion":
         return await fetch_dailymotion(client, url)
     if platform == "niconico":

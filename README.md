@@ -38,7 +38,8 @@
 
 - **自动识别**：群消息里出现链接就自动出卡片，不需要 @ 或指令
 - **19 个平台**：YouTube、TikTok、Instagram、X、GitHub、Bluesky、pixiv、Steam、Reddit、维基百科、维基文库、Dailymotion、niconico、Spotify、Vimeo、SoundCloud、Threads、Twitch、Facebook
-- **热门评论**：YouTube、TikTok、X、GitHub Issue/PR、Bluesky、pixiv、Steam 的卡片会附带几条高赞评论
+- **热门评论**：YouTube、TikTok、X、Instagram、GitHub Issue/PR、Bluesky、pixiv、Steam 的卡片会附带几条高赞评论
+- **评论靠 Cookie**：X 和 Instagram 需要登录态，填 `x_cookie` / `instagram_cookie` 即可，不用在服务器上跑浏览器登录
 - **Steam 评测**：抓社区里最有帮助的评测，带推荐/不推荐、游玩时长和赞数；填了 Web API Key 还能显示当前在线人数
 - **评论单独看**：`/评论` 出一张只放评论的卡，最多 10 条
 - **维基全文**：`/全文` 把词条或维基文库作品分页渲染，合并转发发出，中文按简体显示
@@ -66,7 +67,7 @@
 |---|---|---|
 | YouTube | 标题、频道、简介、封面、时长、播放/点赞 | ✔ 热门评论 |
 | TikTok | 视频封面或图集、作者、播放/点赞/评论/分享/收藏 | ✔ 按点赞排序 |
-| Instagram | 帖子和 Reels 的作者、配文、图片（通过公开的嵌入修复站读取） | ✘ 需要登录 |
+| Instagram | 帖子和 Reels 的作者、配文、图片（通过公开的嵌入修复站读取） | ✔ 填 `instagram_cookie` 后可看评论 |
 | X / Twitter | 正文、作者、配图、引用帖、回复/转帖/喜欢/浏览 | ✔ 需配置浏览器服务（较慢，自动预览最多等 15 秒） |
 | GitHub | 仓库、Issue、PR、用户主页 | ✔ Issue/PR 评论 |
 | Bluesky | 正文、作者、配图、互动数 | ✔ 按点赞排序的回复 |
@@ -216,26 +217,22 @@ AstrBot WebUI -> 插件 -> 插件配置
 | `x_comments` | X 帖子也抓评论 |
 | `x_comments_wait` | 自动预览时 X 评论最多等几秒，默认 `15` |
 | `x_browser_url` / `x_browser_token` | 浏览器服务地址和 Token（抓取 X 评论用） |
-| `x_cookie` | 手动填的 Cookie（可选），填了就不用走登录链接 |
+| `x_cookie` | 从自己浏览器复制的 X Cookie，抓评论必需 |
+| `instagram_cookie` | Instagram 的 `sessionid`，填了才能看 IG 评论 |
 
-X 卡片本身走公开接口，不需要登录；只有「热门评论」需要一台登录过 X 的浏览器。这套服务已经随插件放在 [`x-browser-service/`](x-browser-service/README.md)，用 Docker 起两个容器即可：
+X 卡片本身走公开接口，不需要登录；只有「热门评论」需要登录态。插件不替你登录 X，而是**用你自己浏览器里的 Cookie**——比在服务器上跑浏览器自动化稳，也不容易触发风控封 IP。
+
+抓取后端随插件放在 [`x-browser-service/`](x-browser-service/README.md)，起一个容器即可：
 
 ```bash
 cd x-browser-service
-cp .env.example .env      # 填管理 Token 和 HTTPS 登录域名
+cp .env.example .env      # 填 Token，确认 Cookie 目录
 docker compose up -d
 ```
 
-部署完把地址和 Token 填进 `x_browser_url` / `x_browser_token`。不部署也不影响其他平台，只是 X 卡片没有评论。
+再把地址和 Token 填进 `x_browser_url` / `x_browser_token`。不部署也不影响其他平台，只是 X 卡片没有评论。
 
-#### 🔑 Cookie 怎么来：两种方式
-
-**方式一（推荐）：手动填 Cookie** —— 把自己浏览器里的 `auth_token` 和 `ct0` 粘到配置项 `x_cookie`，改完重载插件即可。不用部署登录服务，也不用公网地址。
-**方式二（可选）：一次性登录链接** —— 让服务在服务器上开浏览器，你远程登录一次，Cookie 自动保存。需要能打开的公网地址。
-
-填了 `x_cookie` 就在插件加载时写进抓取服务；留空则走登录链接。
-
-##### 从哪里拿 Cookie
+#### 🔑 Cookie 怎么来：从哪里拿
 
 **前提：在电脑上操作**（手机浏览器看不到开发者工具），并且这个浏览器**已经登录了 x.com**。无痕/隐私窗口不行，关掉就没了。
 
@@ -264,46 +261,6 @@ docker compose up -d
 **怎么确认成功**：群里发一个 X 帖子链接，卡片下面出现「热门评论」就说明 Cookie 生效了。没出来的话看日志有没有 `[LinkPreview] 已写入手填的 X Cookie`。
 
 **Cookie 会过期**：改密码、在别处退出登录、太久不用都可能失效。表现是评论突然变空，重新按上面步骤复制一次即可。
-
-#### 🔑 方式二：走一次性登录链接（可选）
-
-**不用手动从浏览器开发者工具复制 Cookie**。服务在服务器上自己开一个 Chromium，你在里面正常登录，登录成功后 Cookie 自动保存。
-
-**第一步，生成一次性登录链接。** 调服务的接口（`X_LOGIN_SERVICE_TOKEN` 就是 `.env` 里那个）：
-
-```bash
-curl -s -X POST http://127.0.0.1:6080/api/session \
-  -H "Authorization: Bearer $X_LOGIN_SERVICE_TOKEN"
-# {"login_url": "https://xlogin.example.com/login/xxxxxxxx", "expires_in": 900}
-```
-
-返回的 `login_url` 就是一次性链接，**15 分钟内有效，只能用一次**。
-
-> [!IMPORTANT]
-> 链接里的域名不是插件带的，是你自己在 `.env` 的 `X_LOGIN_PUBLIC_URL` 里填的那个，每个人不一样。**没有域名也能用**：把它设成 `http://127.0.0.1:6080`，然后在自己电脑上开 SSH 隧道 `ssh -L 6080:127.0.0.1:6080 root@你的服务器`，在本机浏览器打开链接即可。详见 [x-browser-service/README.md](x-browser-service/README.md) 的「没有域名：用 SSH 隧道」。
-
-**第二步，在链接里登录。** 打开链接 → 点「进入 X 登录窗口」→ 操作服务器上的 Chromium，正常输入账号密码、过验证码和二步验证。
-
-浏览器进到 X 首页、拿到 `auth_token` 和 `ct0` 后，服务会**自动保存 Cookie 并关闭窗口**。没自动识别的话，页面上有「已完成登录，保存 Cookie」按钮。
-
-**第三步，确认生效。** Cookie 默认写在：
-
-```
-data/plugin_data/<读取它的那个插件>/x_cookies.json
-```
-
-具体路径由 `.env` 的 `ASTRBOT_COOKIE_DIR` 决定。文件里能看到 `auth_token` 和 `ct0` 两条就说明登录成功。
-
-> [!TIP]
-> 登录链接等于一次性的账号入口，别往群里发。用完就失效，想中途取消可以调 `POST /api/cancel`。
->
-> Cookie 会过期，X 改密码、踢设备、或者太久不用都可能失效。表现是评论突然变成空，重新走一遍上面的流程即可。
-
-> [!TIP]
-> 用临时隧道（`*.lhr.life` 这类）时，隧道建立到可用大约要 **20 秒**，页面在那之前打不开是正常的。链接本身 15 分钟内有效，不用重复生成。
-
-> [!NOTE]
-> 登录只影响**评论**。X 卡片的标题、正文、配图、点赞数走的是公开接口，没登录也能出，登录也不会让它变得更好。
 
 ### 📖 维基全文
 

@@ -25,7 +25,6 @@ HELP = """外链预览
 /全文 [维基链接]：把维基百科词条或维基文库作品的全文分页，合并转发发出（也可用 /维基全文）
 /预览图片 [开/关/默认]：管理员切换本群卡片是否显示配图和封面，不带参数查看当前状态
 /预览帮助：查看这条帮助
-/x登录：私聊我，拿一个一次性 X 登录链接（在服务器浏览器里登录，自动保存 Cookie）
 能拿到评论的平台：YouTube、TikTok、X（需配置浏览器服务，较慢）、GitHub Issue/PR、Bluesky、pixiv。Instagram、Reddit 拿不到评论。"""
 
 PLUGIN_NAME = "astrbot_plugin_link_preview"
@@ -350,7 +349,8 @@ class LinkPreviewPlugin(Star):
             card = await fetchers.fetch(client, platform, url,
                                         github_token=self.config.get("github_token") or None,
                                         comments=n_comments,
-                                        steam_api_key=self.config.get("steam_api_key") or None)
+                                        steam_api_key=self.config.get("steam_api_key") or None,
+                                        instagram_cookie=self.config.get("instagram_cookie") or None)
             if x_task:
                 card["comments"] = await x_task
             card = self._filter_card(card)
@@ -461,43 +461,6 @@ class LinkPreviewPlugin(Star):
             event.stop_event()
 
     # ------------------------------------------------------------------ 指令
-
-    @filter.command("x登录", alias={"xlogin", "登录x"})
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    async def xlogin_cmd(self, event: AstrMessageEvent):
-        """私聊拿一次性 X 登录链接：服务在服务器上开浏览器，登录完自动存 Cookie。"""
-        if event.get_group_id():
-            yield event.plain_result("请私聊我发 /x登录，登录链接不能发到群里。")
-            return
-        url = str(self.config.get("x_login_url", "") or "").strip().rstrip("/")
-        token = str(self.config.get("x_browser_token", "") or "").strip()
-        if not url or len(token) < 32:
-            yield event.plain_result("还没配置 X 登录服务：请在插件配置里填 x_login_url 和 x_browser_token。")
-            return
-        try:
-            async with httpx.AsyncClient(trust_env=False, timeout=120) as c:
-                r = await c.post(url + "/api/session", headers={"Authorization": "Bearer " + token})
-            data = r.json() if "json" in r.headers.get("content-type", "") else {}
-        except Exception as e:
-            yield event.plain_result(f"登录服务连不上：{e}")
-            return
-        link = data.get("login_url")
-        if r.status_code != 200 or not link:
-            yield event.plain_result(f"登录服务返回异常：{data.get('error') or r.status_code}")
-            return
-        mins = max(1, int((data.get("expires_in") or 900) / 60))
-        path = "/login/" + link.rsplit("/login/", 1)[-1]
-        try:
-            port = urlsplit(url).port or 6080
-        except ValueError:
-            port = 6080
-        yield event.plain_result(
-            f"一次性 X 登录链接（{mins} 分钟内有效，只能用一次）\n"
-            f"\n【公网】\n{link}"
-            f"\n\n【本地】\nhttp://127.0.0.1:{port}{path}"
-            f"\n（本地地址需先建隧道：ssh -L {port}:127.0.0.1:{port} root@你的服务器）"
-            "\n\n打开后点「进入 X 登录窗口」，在服务器的浏览器里登录，拿到 Cookie 后会自动保存并关窗。"
-        )
 
     @filter.command("预览帮助", alias={"previewhelp"})
     async def preview_help(self, event: AstrMessageEvent):
