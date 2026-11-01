@@ -171,6 +171,25 @@ class Renderer:
         self._installing = False
         self._install_tried = False
 
+    async def _run_playwright(self, *args, timeout=900):
+        """跑一条 playwright 命令，成功返回 True。"""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "playwright", *args,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+            )
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout)
+            tail = " / ".join((out or b"").decode("utf-8", "ignore").strip().splitlines()[-2:])
+            if proc.returncode == 0:
+                logger.info(f"[LinkPreview] playwright {' '.join(args)} 完成 {tail}")
+                return True
+            logger.warning(f"[LinkPreview] playwright {' '.join(args)} 失败（{proc.returncode}）：{tail}")
+        except asyncio.TimeoutError:
+            logger.warning(f"[LinkPreview] playwright {' '.join(args)} 超时")
+        except Exception as e:
+            logger.warning(f"[LinkPreview] playwright {' '.join(args)} 出错：{e}")
+        return False
+
     async def _download_browser(self):
         """一个浏览器都找不到时，后台跑一次 playwright install chromium。
 
@@ -181,16 +200,11 @@ class Renderer:
         self._installing = self._install_tried = True
         logger.info("[LinkPreview] 没找到可用浏览器，开始下载 Chromium（约 150MB，只需一次）")
         try:
-            proc = await asyncio.create_subprocess_exec(
-                sys.executable, "-m", "playwright", "install", "chromium",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-            )
-            out, _ = await asyncio.wait_for(proc.communicate(), 900)
-            tail = " / ".join((out or b"").decode("utf-8", "ignore").strip().splitlines()[-2:])
-            if proc.returncode == 0:
-                logger.info(f"[LinkPreview] Chromium 下载完成，下次预览生效 {tail}")
-            else:
-                logger.warning(f"[LinkPreview] Chromium 下载失败（{proc.returncode}）：{tail}")
+            ok = await self._run_playwright("install", "chromium", timeout=900)
+            # 精简镜像里只有浏览器二进制、没有系统库，装完也起不来，顺手补上（需要 root）
+            if ok and sys.platform.startswith("linux") and hasattr(os, "geteuid") and os.geteuid() == 0:
+                logger.info("[LinkPreview] 补装 Chromium 的系统依赖（apt，可能要几分钟）")
+                await self._run_playwright("install-deps", "chromium", timeout=900)
         except asyncio.TimeoutError:
             logger.warning("[LinkPreview] Chromium 下载超时（15 分钟），先继续用文转图")
         except Exception as e:
