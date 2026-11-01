@@ -262,6 +262,42 @@ docker compose up -d
 
 **Cookie 会过期**：改密码、在别处退出登录、太久不用都可能失效。表现是评论突然变空，重新按上面步骤复制一次即可。
 
+### 📸 Instagram 评论
+
+| 配置项 | 说明 |
+|--------|------|
+| `instagram_cookie` | Instagram 的 `sessionid`，填了才能看评论 |
+
+Instagram 的正文和配图走公开的嵌入修复站，不需要登录；**评论要登录态**。
+
+#### 从哪里拿 sessionid
+
+1. 电脑浏览器打开 <https://www.instagram.com>，确认已经登录
+2. 按 `F12` 打开开发者工具
+3. 切到 **Application** → **Cookies** → `https://www.instagram.com`
+   - Firefox：`Storage` → `Cookies`
+4. 在过滤框输入 `sessionid`，找到这一行
+5. 双击 **Value** 复制。值很长，中间会有个 `%3A`（编码后的冒号），**别改它**
+6. 填进 `instagram_cookie`，带不带 `sessionid=` 前缀都行：
+
+   ```
+   sessionid=12345678%3AAbCdEfGh...
+   ```
+
+7. 保存 → 在 WebUI 里重载插件（或重启 AstrBot）
+
+> [!TIP]
+> 只认 `sessionid`，不需要 `csrftoken`。手机 App 里拿不到，必须用电脑浏览器。
+> 建议用一个专门的小号，避免主号受影响。
+
+**怎么确认成功**：群里发一个 Instagram 帖子链接，卡片下面出现评论就对了。失败会在日志里看到原因：
+
+```
+[LinkPreview] Instagram 评论获取失败：Instagram 拒绝请求：...
+```
+
+**sessionid 会过期**：退出登录、改密码、太久不用都会失效。表现是评论变空，重新复制一次即可。
+
 ### 📖 维基全文
 
 | 配置项 | 说明 |

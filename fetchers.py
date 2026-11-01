@@ -22,6 +22,13 @@ from urllib.parse import quote, unquote, urljoin, urlsplit
 
 import httpx
 
+try:                      # 插件里跑用 AstrBot 的 logger；单独跑脚本时退回标准库
+    from astrbot.api import logger
+except Exception:         # pragma: no cover
+    import logging
+
+    logger = logging.getLogger(__name__)
+
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
@@ -1149,6 +1156,9 @@ async def fetch_instagram_comments(client, url, cookie, n=3):
     if r.status_code != 200:
         raise FetchError(f"Instagram HTTP {r.status_code}（sessionid 可能已失效）")
     data = r.json() if "json" in r.headers.get("content-type", "") else {}
+    # IG 失败时也返回 200，只在 body 里写 status=fail，不检查就会静默变成「0 条评论」
+    if str(data.get("status", "")).lower() == "fail":
+        raise FetchError(f"Instagram 拒绝请求：{data.get('message') or 'sessionid 可能已失效'}")
     out = []
     for c in data.get("comments") or []:
         text = (c.get("text") or "").strip()
@@ -1270,7 +1280,8 @@ async def fetch(client, platform, url, github_token=None, comments=0,
         if comments and instagram_cookie:
             try:
                 c["comments"] = await fetch_instagram_comments(client, url, instagram_cookie, comments)
-            except (FetchError, httpx.HTTPError, ValueError):
+            except (FetchError, httpx.HTTPError, ValueError) as e:
+                logger.warning(f"[LinkPreview] Instagram 评论获取失败：{e}")
                 c["comments"] = []
         return c
     if platform == "dailymotion":
