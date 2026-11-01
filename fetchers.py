@@ -28,7 +28,7 @@ UA = (
 )
 CST = timezone(timedelta(hours=8))
 # 维基要求 User-Agent 里带联系地址，不带会被 403
-WIKI_UA = "NekoLinkPreview/1.0 (+https://game.nekocat.xyz/) httpx"
+WIKI_UA = "NekoLinkPreview/1.0 (+https://github.com/EndermanMYR/astrbot_plugin_link_preview) httpx"
 # Instagram 修复站只给「聊天软件抓取预览」的 User-Agent 返回内容
 EMBED_BOT_UA = "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)"
 
