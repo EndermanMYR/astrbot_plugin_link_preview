@@ -131,6 +131,12 @@
         "default": "",
         "hint": "留空时插件会自动查找可用的服务配置"
     },
+    "x_cookie": {
+        "description": "手动填 X Cookie（可选）",
+        "type": "string",
+        "default": "",
+        "hint": "不想走浏览器登录时用：从浏览器开发者工具复制 Cookie，粘贴 auth_token=...; ct0=... 这一整段即可。填了会在插件加载时自动写入抓取服务，留空则用登录链接方式"
+    },
     "x_login_url": {
         "description": "X 登录服务地址",
         "type": "string",

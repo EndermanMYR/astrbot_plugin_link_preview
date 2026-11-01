@@ -705,6 +705,23 @@ async def health(request):
     return web.json_response({"ok": True, "browser": BROWSER._ctx is not None})
 
 
+async def api_cookies(request):
+    """手动写入 Cookie。Browser 会按文件 mtime 自动重载，不用重启。"""
+    body = await request.json()
+    auth = str(body.get("auth_token", "")).strip()
+    ct0 = str(body.get("ct0", "")).strip()
+    if not auth or not ct0:
+        return web.json_response({"error": "auth_token 和 ct0 都不能为空"}, status=400)
+    try:
+        os.makedirs(os.path.dirname(COOKIE_FILE) or ".", exist_ok=True)
+        with open(COOKIE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"auth_token": auth, "ct0": ct0}, f, indent=2)
+        os.chmod(COOKIE_FILE, 0o600)
+    except OSError as e:
+        return web.json_response({"error": f"写入失败：{e}"}, status=500)
+    return web.json_response({"ok": True})
+
+
 async def api_search(request):
     body = await request.json()
     query = str(body.get("query", "")).strip()
@@ -852,6 +869,7 @@ async def on_cleanup(app):
 def make_app():
     app = web.Application(middlewares=[errors, guard])
     app.router.add_get("/health", health)
+    app.router.add_post("/api/cookies", api_cookies)
     app.router.add_post("/api/search", api_search)
     app.router.add_post("/api/user", api_user)
     app.router.add_post("/api/user_posts", api_user_posts)

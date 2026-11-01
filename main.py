@@ -40,6 +40,23 @@ SEND_FAIL_NOTICE = "这张预览卡片发送失败（可能被 QQ 拦截了）�
 REPLY_BLOCK_NOTICE = "（这条回复包含屏蔽词，已拦截）"
 
 
+def _cookie_pair(raw):
+    """从粘贴的 Cookie 里抠出 auth_token 和 ct0，认不出就返回 None。"""
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    auth = re.search(r"auth_token\s*[=:]\s*([0-9a-zA-Z]{20,})", text)
+    ct0 = re.search(r"ct0\s*[=:]\s*([0-9a-zA-Z]{20,})", text)
+    if auth and ct0:
+        return auth.group(1), ct0.group(1)
+    # 允许只粘两条值，按「长的当 ct0」兜底
+    parts = [x for x in re.split(r"[;\s]+", text) if re.fullmatch(r"[0-9a-zA-Z]{20,}", x)]
+    if len(parts) == 2:
+        parts.sort(key=len)
+        return parts[0], parts[1]
+    return None
+
+
 class Blocked(Exception):
     """内容命中敏感词。"""
     notice = None
@@ -98,6 +115,12 @@ class LinkPreviewPlugin(Star):
         except OSError as e:
             logger.error(f"[LinkPreview] R18 词表加载失败：{e}")
             self.r18 = wordfilter.WordFilter(None, self.config.get("r18_words") or [], wordfilter.BUNDLED_R18)
+
+        if _cookie_pair(self.config.get("x_cookie", "")):
+            try:
+                asyncio.ensure_future(self._push_cookie())
+            except RuntimeError:
+                pass
 
     async def terminate(self):
         await self.renderer.close()
@@ -216,6 +239,27 @@ class LinkPreviewPlugin(Star):
         url = str(self.config.get("x_browser_url", "") or "").strip()
         token = str(self.config.get("x_browser_token", "") or "").strip()
         return (url, token) if url and len(token) >= 32 else (None, None)
+
+    async def _push_cookie(self):
+        """把配置里手填的 Cookie 写进抓取服务，登录方式之外的另一条路。"""
+        pair = _cookie_pair(self.config.get("x_cookie", ""))
+        if not pair:
+            return
+        url, token = self._x_service()
+        if not url or not token:
+            logger.warning("[LinkPreview] 填了 x_cookie 但没配 x_browser_url/token，跳过")
+            return
+        try:
+            async with httpx.AsyncClient(trust_env=False, timeout=20) as c:
+                r = await c.post(url.rstrip("/") + "/api/cookies",
+                                 headers={"Authorization": "Bearer " + token},
+                                 json={"auth_token": pair[0], "ct0": pair[1]})
+            if r.status_code == 200:
+                logger.info("[LinkPreview] 已写入手填的 X Cookie")
+            else:
+                logger.warning(f"[LinkPreview] 写入 X Cookie 失败：HTTP {r.status_code}")
+        except Exception as e:
+            logger.warning(f"[LinkPreview] 写入 X Cookie 出错：{e}")
 
     async def _x_replies_for(self, url, n, wait):
         """等最多 wait 秒；没等完就先返回空，后台继续抓，结果缓存给下次（比如 /评论）用。"""
