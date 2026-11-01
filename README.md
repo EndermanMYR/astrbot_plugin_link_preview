@@ -266,9 +266,15 @@ docker compose up -d
 
 | 配置项 | 说明 |
 |--------|------|
-| `instagram_cookie` | Instagram 的 `sessionid`，填了才能看评论 |
+| `instagram_cookie` | Instagram 的登录 Cookie（实验性，见下） |
 
-Instagram 的正文和配图走公开的嵌入修复站，不需要登录；**评论要登录态**。
+Instagram 的正文和配图走公开的嵌入修复站，不需要登录。
+
+> [!WARNING]
+> **Instagram 评论目前大概率拿不到。** 它的私有接口对非浏览器客户端限制很严，
+> 即使带上完整 Cookie（`sessionid` + `csrftoken` + `ds_user_id`）也会返回
+> `We're sorry, but something went wrong`。实测换 IP、换域名、补 `x-csrftoken` 都没用。
+> 这个配置项保留着，接口放行时能用；拿不到会在日志里打一行原因，不影响卡片其他部分。
 
 #### 从哪里拿 sessionid
 
@@ -278,7 +284,7 @@ Instagram 的正文和配图走公开的嵌入修复站，不需要登录；**�
    - Firefox：`Storage` → `Cookies`
 4. 在过滤框输入 `sessionid`，找到这一行
 5. 双击 **Value** 复制。值很长，中间会有个 `%3A`（编码后的冒号），**别改它**
-6. 填进 `instagram_cookie`，带不带 `sessionid=` 前缀都行：
+6. 填进 `instagram_cookie`，建议把整段 Cookie 都粘进去（`sessionid`、`csrftoken`、`ds_user_id` 都要）：
 
    ```
    sessionid=12345678%3AAbCdEfGh...
