@@ -116,11 +116,10 @@ class LinkPreviewPlugin(Star):
             logger.error(f"[LinkPreview] R18 词表加载失败：{e}")
             self.r18 = wordfilter.WordFilter(None, self.config.get("r18_words") or [], wordfilter.BUNDLED_R18)
 
+    async def initialize(self):
+        """插件被激活时调用；这里才保证有事件循环，用来写入手填的 Cookie。"""
         if _cookie_pair(self.config.get("x_cookie", "")):
-            try:
-                asyncio.ensure_future(self._push_cookie())
-            except RuntimeError:
-                pass
+            await self._push_cookie()
 
     async def terminate(self):
         await self.renderer.close()
