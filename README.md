@@ -46,12 +46,12 @@
 
 <table>
   <tr>
-    <td width="50%" align="center"><img alt="YouTube 视频卡片，带播放量、点赞和热门评论" src="docs/images/card-youtube.jpg" /></td>
-    <td width="50%" align="center"><img alt="GitHub 仓库卡片" src="docs/images/card-github.jpg" /></td>
+    <td width="50%" align="center" valign="top"><img alt="YouTube 视频卡片，带播放量、点赞和热门评论" src="docs/images/card-youtube.jpg" /></td>
+    <td width="50%" align="center" valign="top"><img alt="GitHub 仓库卡片" src="docs/images/card-github.jpg" /></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img alt="Steam 游戏卡片，带价格、推荐数和标签" src="docs/images/card-steam.jpg" /></td>
-    <td width="50%" align="center"><img alt="浅色主题下的维基百科词条卡片" src="docs/images/card-light.jpg" /></td>
+    <td width="50%" align="center" valign="top"><img alt="Steam 游戏卡片，带价格、推荐数和标签" src="docs/images/card-steam.jpg" /></td>
+    <td width="50%" align="center" valign="top"><img alt="浅色主题下的维基百科词条卡片" src="docs/images/card-light.jpg" /></td>
   </tr>
 </table>
 
