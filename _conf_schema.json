@@ -1,0 +1,294 @@
+{
+    "enabled": {
+        "description": "启用自动识别",
+        "type": "bool",
+        "default": true,
+        "hint": "关掉后只保留 /预览 和 /评论 指令"
+    },
+    "platforms": {
+        "description": "识别哪些平台",
+        "type": "object",
+        "items": {
+            "x": {
+                "description": "X / Twitter（接管 X 搜索插件的自动识别）",
+                "type": "bool",
+                "default": true
+            },
+            "youtube": {
+                "description": "YouTube",
+                "type": "bool",
+                "default": true
+            },
+            "reddit": {
+                "description": "Reddit",
+                "type": "bool",
+                "default": true
+            },
+            "github": {
+                "description": "GitHub",
+                "type": "bool",
+                "default": true
+            },
+            "bluesky": {
+                "description": "Bluesky",
+                "type": "bool",
+                "default": true
+            },
+            "pixiv": {
+                "description": "pixiv（R-18 作品不显示图片）",
+                "type": "bool",
+                "default": true
+            },
+            "steam": {
+                "description": "Steam 商店",
+                "type": "bool",
+                "default": true
+            },
+            "wikipedia": {
+                "description": "维基百科",
+                "type": "bool",
+                "default": true
+            },
+            "wikisource": {
+                "description": "维基文库（古籍、诗词、小说章节）",
+                "type": "bool",
+                "default": true
+            },
+            "tiktok": {
+                "description": "TikTok（视频和图集，带热门评论）",
+                "type": "bool",
+                "default": true,
+                "hint": "媒体解析插件也会处理 TikTok（发视频），两个都开会各回一条"
+            },
+            "spotify": {
+                "description": "Spotify",
+                "type": "bool",
+                "default": true
+            },
+            "vimeo": {
+                "description": "Vimeo",
+                "type": "bool",
+                "default": true
+            },
+            "soundcloud": {
+                "description": "SoundCloud",
+                "type": "bool",
+                "default": true
+            },
+            "instagram": {
+                "description": "Instagram（帖子和 Reels）",
+                "type": "bool",
+                "default": true
+            },
+            "threads": {
+                "description": "Threads",
+                "type": "bool",
+                "default": true
+            },
+            "twitch": {
+                "description": "Twitch",
+                "type": "bool",
+                "default": true
+            },
+            "facebook": {
+                "description": "Facebook（多数要登录）",
+                "type": "bool",
+                "default": true
+            },
+            "dailymotion": {
+                "description": "Dailymotion",
+                "type": "bool",
+                "default": true
+            },
+            "niconico": {
+                "description": "niconico（ニコニコ動画）",
+                "type": "bool",
+                "default": true
+            }
+        }
+    },
+    "comment_count": {
+        "description": "卡片里显示几条热门评论",
+        "type": "int",
+        "default": 3,
+        "hint": "0 表示不显示。能拿到评论的平台：YouTube、TikTok、GitHub Issue/PR、Bluesky、pixiv"
+    },
+    "x_comments": {
+        "description": "X 帖子也抓评论",
+        "type": "bool",
+        "default": true,
+        "hint": "借用 X 搜索插件的已登录浏览器搜索 conversation_id，单条要 10～30 秒"
+    },
+    "x_comments_wait": {
+        "description": "自动预览时 X 评论最多等几秒",
+        "type": "int",
+        "default": 15,
+        "hint": "超时先发不带评论的卡片，后台抓到的评论留给 /评论 指令用"
+    },
+    "x_browser_url": {
+        "description": "X 浏览器服务地址（可选）",
+        "type": "string",
+        "default": "",
+        "hint": "留空自动读取 X 搜索插件的配置"
+    },
+    "x_browser_token": {
+        "description": "X 浏览器服务 Token（可选）",
+        "type": "string",
+        "default": "",
+        "hint": "留空自动读取 X 搜索插件的配置"
+    },
+    "max_links_per_message": {
+        "description": "一条消息最多预览几个链接",
+        "type": "int",
+        "default": 2
+    },
+    "dedupe_seconds": {
+        "description": "同一链接在同一个群里多久内不重复预览（秒）",
+        "type": "int",
+        "default": 30,
+        "hint": "只用来防止同一时刻重复触发；设太长会让别人稍后再发同一个链接时没有反应"
+    },
+    "theme": {
+        "description": "卡片主题",
+        "type": "string",
+        "options": [
+            "dark",
+            "light"
+        ],
+        "default": "dark"
+    },
+    "text_length": {
+        "description": "正文最多显示多少字",
+        "type": "int",
+        "default": 420
+    },
+    "show_images": {
+        "description": "显示配图和封面",
+        "type": "bool",
+        "default": true,
+        "hint": "全局默认值；管理员可以在群里用 /预览图片 开/关 单独设置某个群"
+    },
+    "blur_sensitive": {
+        "description": "平台标记为敏感的图片自动模糊",
+        "type": "bool",
+        "default": true
+    },
+    "private_enabled": {
+        "description": "私聊里也自动识别",
+        "type": "bool",
+        "default": false
+    },
+    "group_whitelist": {
+        "description": "只在这些群里自动识别",
+        "type": "list",
+        "default": [],
+        "hint": "填群号；留空表示所有群"
+    },
+    "group_blacklist": {
+        "description": "这些群里不自动识别",
+        "type": "list",
+        "default": []
+    },
+    "proxy": {
+        "description": "访问国外平台用的代理",
+        "type": "string",
+        "default": "",
+        "hint": "例如 http://127.0.0.1:7890；服务器能直连就留空"
+    },
+    "github_token": {
+        "description": "GitHub Token（可选）",
+        "type": "string",
+        "default": "",
+        "hint": "不填每小时只能查 60 次"
+    },
+    "fetch_timeout": {
+        "description": "抓取超时（秒）",
+        "type": "int",
+        "default": 12
+    },
+    "render_timeout": {
+        "description": "渲染超时（秒）",
+        "type": "int",
+        "default": 25
+    },
+    "full_max_pages": {
+        "description": "/全文 最多发几页（维基百科和维基文库通用）",
+        "type": "int",
+        "default": 15,
+        "hint": "维基大词条可能有几十页，超出的部分不发，最后一页会注明"
+    },
+    "full_page_chars": {
+        "description": "/全文 每页大约多少字",
+        "type": "int",
+        "default": 3500
+    },
+    "block_enabled": {
+        "description": "启用敏感词屏蔽",
+        "type": "bool",
+        "default": true,
+        "hint": "预览卡片、评论和 /全文 都会检查"
+    },
+    "block_words_file": {
+        "description": "敏感词表文件",
+        "type": "string",
+        "default": "data/sensitive_words/political.txt",
+        "hint": "相对 AstrBot 工作目录。文件不存在时会用插件自带的政治敏感词表创建；X 搜索插件也读这个文件。每行一个词，# 开头是注释，改完立即生效"
+    },
+    "block_words": {
+        "description": "额外屏蔽词",
+        "type": "list",
+        "default": [],
+        "hint": "在词表文件之外追加，改完需要保存配置"
+    },
+    "block_mode": {
+        "description": "命中后怎么处理",
+        "type": "string",
+        "options": [
+            "整条不发",
+            "打码后发送"
+        ],
+        "default": "整条不发",
+        "hint": "打码后发送：敏感词换成 ■，配图不放；遇到插字写法（如「法 轮 功」）打不了码时仍然整条不发。命中的评论总是单独去掉"
+    },
+    "block_notice": {
+        "description": "被拦截或发不出去时在群里提醒",
+        "type": "bool",
+        "default": true,
+        "hint": "关闭后：自动预览命中屏蔽词时静默跳过，机器人自己的回复命中时直接不发。指令被拦截、卡片被 QQ 拒收时总会提醒"
+    },
+    "r18_enabled": {
+        "description": "启用 R18 过滤",
+        "type": "bool",
+        "default": true,
+        "hint": "卡片的标题、正文、作者、标签命中 R18 词表就整条不发；命中的评论单独去掉。维基 /全文 不做 R18 检查"
+    },
+    "r18_block_flagged": {
+        "description": "平台标记为敏感的也整条不发",
+        "type": "bool",
+        "default": true,
+        "hint": "X、Bluesky、Reddit 的敏感标记和 pixiv 的 R-18。关闭后只把配图模糊"
+    },
+    "r18_words_file": {
+        "description": "R18 词表文件",
+        "type": "string",
+        "default": "data/sensitive_words/r18.txt",
+        "hint": "相对 AstrBot 工作目录；不存在时用插件自带的词表创建（合并了 X 搜索插件的内置词表和你配置里的词）。改完立即生效"
+    },
+    "r18_words": {
+        "description": "额外 R18 词",
+        "type": "list",
+        "default": []
+    },
+    "r18_outgoing": {
+        "description": "机器人自己的回复也查 R18",
+        "type": "bool",
+        "default": false,
+        "hint": "打开后大模型回复里出现 R18 词也会被拦下；容易误伤正常聊天，默认关"
+    },
+    "block_outgoing": {
+        "description": "机器人自己的回复也检查",
+        "type": "bool",
+        "default": true,
+        "hint": "大模型回复和其他插件发的文字，发出前含屏蔽词就静默不发。直接调用平台接口发的消息（部分插件的主动消息）不经过这一步，管不到；图片里的文字也查不到"
+    }
+}

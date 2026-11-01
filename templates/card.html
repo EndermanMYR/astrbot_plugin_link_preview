@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --page: #0c0b16;
+    --card-a: #1d1a33;
+    --card-b: #141222;
+    --ink: #f4f1ff;
+    --ink-2: rgba(244, 241, 255, .78);
+    --muted: rgba(244, 241, 255, .5);
+    --line: rgba(255, 255, 255, .1);
+    --chip: rgba(255, 255, 255, .07);
+    --accent: {{ c.color }};
+  }
+  body.light {
+    --page: #eef0f6;
+    --card-a: #ffffff;
+    --card-b: #f7f8fc;
+    --ink: #14161f;
+    --ink-2: rgba(20, 22, 31, .8);
+    --muted: rgba(20, 22, 31, .5);
+    --line: rgba(20, 22, 31, .1);
+    --chip: rgba(20, 22, 31, .05);
+  }
+  /* 弯引号、省略号用西文字体，避免中文字体把英文里的引号排成全角 */
+  @font-face { font-family: "PunctFix"; src: local("Liberation Sans"); unicode-range: U+2018-201F, U+2026; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--page); color: var(--ink); width: 640px;
+    font-family: "PunctFix", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", "Noto Serif CJK SC", "HanaMinA", "HanaMinB", "Noto Color Emoji", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  #card {
+    position: relative; margin: 20px; overflow: hidden;
+    border-radius: 24px; border: 1px solid var(--line);
+    background:
+      radial-gradient(ellipse 70% 45% at 100% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+      linear-gradient(180deg, var(--card-a), var(--card-b));
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .35);
+  }
+  #card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 30%, transparent)); }
+  .inner { padding: 22px 24px 18px; }
+
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+  .badge { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 5px; border-radius: 100px; background: var(--chip); border: 1px solid var(--line); font-size: 13px; font-weight: 700; }
+  .badge i { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 900; color: #fff; background: var(--accent); }
+  .domain { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+
+  .author { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .avatar { width: 46px; height: 46px; border-radius: 50%; flex: none; object-fit: cover; background: var(--chip); border: 2px solid var(--line); }
+  .avatar.letter { display: grid; place-items: center; font-size: 19px; font-weight: 800; color: #fff; border: none;
+    background: linear-gradient(145deg, var(--accent), color-mix(in srgb, var(--accent) 45%, #000)); }
+  .who { min-width: 0; flex: 1; }
+  .who b { display: block; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .who span { display: block; font-size: 13px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .time { font-size: 12.5px; color: var(--muted); white-space: nowrap; align-self: flex-start; margin-top: 3px; }
+
+  .note { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 8px; margin-bottom: 10px;
+    color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+  .note.warn { color: #ffb4a8; background: rgba(255, 122, 107, .12); border-color: rgba(255, 122, 107, .35); }
+  h1 { font-size: 21px; line-height: 1.4; font-weight: 800; margin-bottom: 8px; word-break: break-word; }
+  .text { font-size: 15.5px; line-height: 1.7; color: var(--ink-2); white-space: pre-wrap; word-break: break-word; }
+
+  .quote { margin-top: 12px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--chip); }
+  .quote b { display: block; font-size: 13px; margin-bottom: 4px; }
+  .quote p { font-size: 14px; line-height: 1.6; color: var(--ink-2); white-space: pre-wrap; word-break: break-word; }
+
+  .media { margin-top: 14px; display: grid; gap: 6px; border-radius: 16px; overflow: hidden; position: relative; }
+  .media img { width: 100%; height: 100%; object-fit: cover; display: block; background: var(--chip); }
+  .media.n1 img { max-height: 380px; height: auto; }
+  .media.n2 { grid-template-columns: 1fr 1fr; height: 240px; }
+  .media.n3 { grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; height: 280px; }
+  .media.n3 img:first-child { grid-row: span 2; }
+  .media.n4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; height: 320px; }
+  .media.blur img { filter: blur(26px) saturate(.6); transform: scale(1.15); }
+  .veil { position: absolute; inset: 0; display: grid; place-items: center; font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+  .play { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%;
+    background: rgba(0, 0, 0, .55); border: 2px solid rgba(255, 255, 255, .85); display: grid; place-items: center; }
+  .play::after { content: ""; margin-left: 6px; border-left: 20px solid #fff; border-top: 12px solid transparent; border-bottom: 12px solid transparent; }
+  .dur { position: absolute; right: 10px; bottom: 10px; padding: 3px 8px; border-radius: 7px; background: rgba(0, 0, 0, .72); color: #fff; font-size: 12.5px; font-weight: 700; }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .tags span { font-size: 12px; padding: 3px 10px; border-radius: 100px; background: var(--chip); border: 1px solid var(--line); color: var(--ink-2); }
+
+  .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .stats div { padding: 7px 12px; border-radius: 12px; background: var(--chip); border: 1px solid var(--line); }
+  .stats span { font-size: 11.5px; color: var(--muted); margin-right: 6px; }
+  .stats b { font-size: 14px; }
+
+  .comments { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--line); }
+  .comments .ch { font-size: 12.5px; font-weight: 800; color: var(--muted); letter-spacing: .08em; margin-bottom: 10px; }
+  .cm { padding: 10px 12px; border-radius: 12px; background: var(--chip); border: 1px solid var(--line); }
+  .cm + .cm { margin-top: 8px; }
+  .cm .row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+  .cm .row b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+  .cm .row em { font-style: normal; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .cm .row .lk { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .cm p { font-size: 14px; line-height: 1.6; color: var(--ink-2); white-space: pre-wrap; word-break: break-word; }
+  .foot { display: flex; justify-content: space-between; gap: 12px; padding: 12px 24px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }
+  .foot .url { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .foot .brand { white-space: nowrap; }
+</style>
+</head>
+<body class="{{ theme }}">
+<div id="card">
+  <div class="inner">
+    <div class="head">
+      <span class="badge"><i>{{ c.icon }}</i>{{ c.platform_name }}</span>
+      <span class="domain">{{ c.domain }}</span>
+    </div>
+
+    {% if c.author and c.author.name %}
+    <div class="author">
+      {% if c.author.avatar %}<img class="avatar" src="{{ c.author.avatar }}">
+      {% else %}<div class="avatar letter">{{ c.author.name[:1] }}</div>{% endif %}
+      <div class="who"><b>{{ c.author.name }}</b>{% if c.author.handle %}<span>{{ c.author.handle }}</span>{% endif %}</div>
+      {% if c.time %}<div class="time">{{ c.time }}</div>{% endif %}
+    </div>
+    {% elif c.time %}<div class="time" style="margin-bottom:10px">{{ c.time }}</div>{% endif %}
+
+    {% if c.note %}<div class="note{% if c.sensitive %} warn{% endif %}">{{ c.note }}</div>{% endif %}
+    {% if c.title %}<h1>{{ c.title }}</h1>{% endif %}
+    {% if c.text %}<div class="text">{{ c.text }}</div>{% endif %}
+
+    {% if c.quote %}<div class="quote"><b>{{ c.quote.author }}</b><p>{{ c.quote.text }}</p></div>{% endif %}
+
+    {% if c.images %}
+    <div class="media n{{ c.images|length }}{% if c.sensitive and c.blur %} blur{% endif %}">
+      {% for img in c.images %}<img src="{{ img }}">{% endfor %}
+      {% if c.sensitive and c.blur %}<div class="veil">敏感内容，图片已模糊</div>
+      {% elif c.video %}<div class="play"></div>{% if c.duration %}<div class="dur">{{ c.duration }}</div>{% endif %}{% endif %}
+    </div>
+    {% endif %}
+
+    {% if c.tags %}<div class="tags">{% for t in c.tags %}<span>#{{ t }}</span>{% endfor %}</div>{% endif %}
+
+    {% if c.stats %}<div class="stats">{% for s in c.stats %}<div><span>{{ s[0] }}</span><b>{{ s[1] }}</b></div>{% endfor %}</div>{% endif %}
+
+    {% if c.comments %}
+    <div class="comments">
+      <div class="ch">{{ '评论' if c.comments_mode else '热门评论' }} · {{ c.comments|length }} 条</div>
+      {% for cm in c.comments %}
+      <div class="cm">
+        <div class="row"><b>{{ cm.author or '匿名' }}</b>{% if cm.time %}<em>{{ cm.time }}</em>{% endif %}{% if cm.likes %}<span class="lk">赞 {{ cm.likes }}</span>{% endif %}</div>
+        <p>{{ cm.text }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    {% elif c.comments_mode %}
+    <div class="comments"><div class="ch">评论</div><div class="cm"><p>{{ c.no_comments_reason or '这个链接拿不到评论' }}</p></div></div>
+    {% endif %}
+  </div>
+  <div class="foot"><span class="url">{{ c.short_url }}</span><span class="brand">Neko · 链接预览</span></div>
+</div>
+</body>
+</html>

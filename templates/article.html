@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  /* 维基全文的一页，和 card.html 同一套样式 */
+  @font-face { font-family: "PunctFix"; src: local("Liberation Sans"); unicode-range: U+2018-201F, U+2026; }
+  :root {
+    --page: #0c0b16; --card-a: #1d1a33; --card-b: #141222;
+    --ink: #f4f1ff; --ink-2: rgba(244, 241, 255, .82); --muted: rgba(244, 241, 255, .5);
+    --line: rgba(255, 255, 255, .1); --chip: rgba(255, 255, 255, .07); --accent: #c8ccd1;
+  }
+  body.light {
+    --page: #eef0f6; --card-a: #ffffff; --card-b: #f7f8fc;
+    --ink: #14161f; --ink-2: rgba(20, 22, 31, .82); --muted: rgba(20, 22, 31, .5);
+    --line: rgba(20, 22, 31, .1); --chip: rgba(20, 22, 31, .05); --accent: #54595d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--page); color: var(--ink); width: 680px;
+    font-family: "PunctFix", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", "Noto Serif CJK SC", "HanaMinA", "HanaMinB", "Noto Color Emoji", sans-serif; -webkit-font-smoothing: antialiased; }
+  #card { position: relative; margin: 20px; overflow: hidden; border-radius: 24px; border: 1px solid var(--line);
+    background: linear-gradient(180deg, var(--card-a), var(--card-b)); box-shadow: 0 18px 50px rgba(0, 0, 0, .35); }
+  #card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: linear-gradient(90deg, var(--accent), transparent); }
+  .inner { padding: 22px 26px 20px; }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .badge { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 5px; border-radius: 100px; background: var(--chip); border: 1px solid var(--line); font-size: 13px; font-weight: 700; }
+  .badge i { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 900; color: #14161f; background: #c8ccd1; font-family: Georgia, serif; }
+  .pageno { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+  h1 { font-size: 26px; line-height: 1.35; font-weight: 800; font-family: "Noto Serif CJK SC", Georgia, serif; }
+  h1.cont { font-size: 16px; color: var(--muted); font-family: inherit; font-weight: 700; }
+  .byline { margin-top: 6px; font-size: 14px; color: var(--muted); }
+  .lead { margin: 14px 0 4px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: var(--chip); }
+  .lead img { display: block; width: 100%; max-height: 360px; object-fit: contain; }
+  .sec { margin-top: 18px; }
+  .sec h2 { font-size: 19px; font-weight: 800; padding-bottom: 6px; border-bottom: 1px solid var(--line); margin-bottom: 10px; font-family: "Noto Serif CJK SC", Georgia, serif; }
+  .sec h3 { font-size: 16px; font-weight: 800; margin-bottom: 8px; }
+  .sec h4, .sec h5, .sec h6 { font-size: 14.5px; font-weight: 800; color: var(--ink-2); margin-bottom: 6px; }
+  .sec p { font-size: 15px; line-height: 1.8; color: var(--ink-2); word-break: break-word; }
+  .sec p + p { margin-top: 8px; }
+  .more { margin-top: 18px; padding: 12px 14px; border-radius: 12px; background: var(--chip); border: 1px dashed var(--line); font-size: 13.5px; color: var(--muted); }
+  .foot { display: flex; justify-content: space-between; gap: 12px; padding: 12px 26px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }
+  .foot .url { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .foot .brand { white-space: nowrap; }
+</style>
+</head>
+<body class="{{ theme }}">
+<div id="card">
+  <div class="inner">
+    <div class="head">
+      <span class="badge"><i>{{ a.icon or 'W' }}</i>{{ a.domain }}</span>
+      <span class="pageno">第 {{ no }} / {{ total }} 页</span>
+    </div>
+    {% if no == 1 %}
+      <h1>{{ a.title }}</h1>
+      {% if a.byline %}<div class="byline">{{ a.byline }}</div>{% endif %}
+      {% if a.image %}<div class="lead"><img src="{{ a.image }}"></div>{% endif %}
+    {% else %}
+      <h1 class="cont">{{ a.title }}（续）</h1>
+    {% endif %}
+
+    {% for b in blocks %}
+    <div class="sec">
+      {% if b.title %}
+        {% if b.level <= 2 %}<h2>{{ b.title }}</h2>{% elif b.level == 3 %}<h3>{{ b.title }}</h3>{% else %}<h4>{{ b.title }}</h4>{% endif %}
+      {% endif %}
+      {% for para in b.text.split('\n') if para.strip() %}<p>{{ para }}</p>{% endfor %}
+    </div>
+    {% endfor %}
+
+    {% if no == total and hidden %}
+    <div class="more">还有 {{ hidden }} 页内容没有发出，完整词条请看原文。</div>
+    {% endif %}
+  </div>
+  <div class="foot"><span class="url">{{ a.short_url }}</span><span class="brand">Neko · {{ a.brand or '维基全文' }}</span></div>
+</div>
+</body>
+</html>
