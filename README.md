@@ -215,7 +215,7 @@ AstrBot WebUI -> 插件 -> 插件配置
 | 配置项 | 说明 |
 |--------|------|
 | `x_comments` | X 帖子也抓评论 |
-| `x_comments_wait` | 自动预览时 X 评论最多等几秒，默认 `20` |
+| `x_comments_wait` | 自动预览时 X 评论最多等几秒，默认 `25`（X 页面渲染慢，实测要 10~20 秒）|
 | `x_browser_url` / `x_browser_token` | 浏览器服务地址和 Token（抓取 X 评论用） |
 | `x_cookie` | 从自己浏览器复制的 X Cookie，抓评论必需 |
 
