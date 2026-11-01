@@ -352,15 +352,6 @@ class LinkPreviewPlugin(Star):
                                         steam_api_key=self.config.get("steam_api_key") or None)
             if x_task:
                 card["comments"] = await x_task
-            if platform == "instagram" and n_comments:
-                ig_cookie = str(self.config.get("instagram_cookie", "") or "").strip()
-                service, token = self._x_service()
-                if ig_cookie and service and token:
-                    try:
-                        card["comments"] = await fetchers.fetch_instagram_comments(
-                            service, token, url, ig_cookie, n_comments)
-                    except Exception as e:  # noqa: BLE001 - 拿不到评论不该影响卡片
-                        logger.warning(f"[LinkPreview] Instagram 评论获取失败：{e}")
             card = self._filter_card(card)
             if comments_mode and not card.get("comments"):
                 card["no_comments_reason"] = (

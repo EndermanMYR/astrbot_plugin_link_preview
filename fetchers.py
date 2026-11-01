@@ -858,7 +858,7 @@ def _ws_header(wikitext):
 def _ws_text(html):
     from bs4 import BeautifulSoup
 
-    soup = BeautifulSoup(html, "lxml")
+    soup = BeautifulSoup(html, "html.parser")   # 用内置解析器，省掉 lxml 编译依赖
     for sel in WS_DROP:
         for el in soup.select(sel):
             el.decompose()
@@ -1207,7 +1207,7 @@ async def fetch_oembed(client, platform, url):
 
 
 # 能拿到评论的平台（X、Reddit 不登录拿不到；Steam 评测接口会拦服务器）
-COMMENT_PLATFORMS = {"youtube", "github", "bluesky", "pixiv", "tiktok", "x", "steam", "instagram"}
+COMMENT_PLATFORMS = {"youtube", "github", "bluesky", "pixiv", "tiktok", "x", "steam"}
 
 
 async def fetch(client, platform, url, github_token=None, comments=0, steam_api_key=None):

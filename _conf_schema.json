@@ -131,12 +131,6 @@
         "default": "",
         "hint": "留空时插件会自动查找可用的服务配置"
     },
-    "instagram_cookie": {
-        "description": "Instagram Cookie（可选）",
-        "type": "string",
-        "default": "",
-        "hint": "填了才能抓 Instagram 评论：从浏览器开发者工具复制 instagram.com 的 sessionid 值，粘贴 sessionid=xxx 即可。不填则 Instagram 卡片只有正文和配图"
-    },
     "x_cookie": {
         "description": "手动填 X Cookie（可选）",
         "type": "string",

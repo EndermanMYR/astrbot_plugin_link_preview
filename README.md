@@ -39,7 +39,7 @@
 - **自动识别**：群消息里出现链接就自动出卡片，不需要 @ 或指令
 - **19 个平台**：YouTube、TikTok、Instagram、X、GitHub、Bluesky、pixiv、Steam、Reddit、维基百科、维基文库、Dailymotion、niconico、Spotify、Vimeo、SoundCloud、Threads、Twitch、Facebook
 - **热门评论**：YouTube、TikTok、X、Instagram、GitHub Issue/PR、Bluesky、pixiv、Steam 的卡片会附带几条高赞评论
-- **评论靠 Cookie**：X 和 Instagram 需要登录态，填 `x_cookie` / `instagram_cookie` 即可，不用在服务器上跑浏览器登录
+- **评论靠 Cookie**：X 需要登录态，填 `x_cookie` 即可，不用在服务器上跑浏览器登录
 - **Steam 评测**：抓社区里最有帮助的评测，带推荐/不推荐、游玩时长和赞数；填了 Web API Key 还能显示当前在线人数
 - **评论单独看**：`/评论` 出一张只放评论的卡，最多 10 条
 - **维基全文**：`/全文` 把词条或维基文库作品分页渲染，合并转发发出，中文按简体显示
@@ -67,13 +67,13 @@
 |---|---|---|
 | YouTube | 标题、频道、简介、封面、时长、播放/点赞 | ✔ 热门评论 |
 | TikTok | 视频封面或图集、作者、播放/点赞/评论/分享/收藏 | ✔ 按点赞排序 |
-| Instagram | 帖子和 Reels 的作者、配文、图片（通过公开的嵌入修复站读取） | ✔ 填 `instagram_cookie` 后可看评论 |
-| X / Twitter | 正文、作者、配图、引用帖、回复/转帖/喜欢/浏览 | ✔ 需配置浏览器服务（较慢，自动预览最多等 15 秒） |
-| GitHub | 仓库、Issue、PR、用户主页 | ✔ Issue/PR 评论 |
+| Instagram | 帖子和 Reels 的作者、配文、图片（通过公开的嵌入修复站读取） | ✘ 实测拿不到，见下方说明 |
+| X / Twitter | 正文、作者、配图、引用帖、回复/转帖/喜欢/浏览 | ✔ 需填 `x_cookie` + 浏览器服务（较慢，最多等 15 秒） |
+| GitHub | 仓库、Issue、PR、用户主页 | ✔ Issue/PR 评论（填 `github_token` 免限流） |
 | Bluesky | 正文、作者、配图、互动数 | ✔ 按点赞排序的回复 |
 | pixiv | 标题、作者、标签、数据（R-18 不显示图片） | ✔ |
 | Reddit | 标题、作者、版块 | ✘ 服务器访问被拦 |
-| Steam | 名称、简介、价格、类型、推荐数、当前在线人数 | ✔ 热门评测（含推荐与否、游玩时长、赞数） |
+| Steam | 名称、简介、价格、类型、推荐数；填 `steam_api_key` 才有当前在线人数 | ✔ 热门评测（含推荐与否、游玩时长、赞数） |
 | 维基百科 | 词条摘要、配图 | — |
 | 维基文库 | 作品名、作者、朝代、出处、开头正文；整部书的目录页显示章节列表 | — |
 | Dailymotion | 标题、作者、封面、时长、播放/点赞、标签 | — |
@@ -218,7 +218,6 @@ AstrBot WebUI -> 插件 -> 插件配置
 | `x_comments_wait` | 自动预览时 X 评论最多等几秒，默认 `15` |
 | `x_browser_url` / `x_browser_token` | 浏览器服务地址和 Token（抓取 X 评论用） |
 | `x_cookie` | 从自己浏览器复制的 X Cookie，抓评论必需 |
-| `instagram_cookie` | Instagram 的 `sessionid`，填了才能看 IG 评论 |
 
 X 卡片本身走公开接口，不需要登录；只有「热门评论」需要登录态。插件不替你登录 X，而是**用你自己浏览器里的 Cookie**——比在服务器上跑浏览器自动化稳，也不容易触发风控封 IP。
 
@@ -261,51 +260,6 @@ docker compose up -d
 **怎么确认成功**：群里发一个 X 帖子链接，卡片下面出现「热门评论」就说明 Cookie 生效了。没出来的话看日志有没有 `[LinkPreview] 已写入手填的 X Cookie`。
 
 **Cookie 会过期**：改密码、在别处退出登录、太久不用都可能失效。表现是评论突然变空，重新按上面步骤复制一次即可。
-
-### 📸 Instagram 评论
-
-| 配置项 | 说明 |
-|--------|------|
-| `instagram_cookie` | Instagram 的登录 Cookie（实验性，见下） |
-
-Instagram 的正文和配图走公开的嵌入修复站，不需要登录。
-
-> [!WARNING]
-> **Instagram 评论目前实测拿不到。** 走的是「登录态浏览器渲染帖子页 + 抓 DOM」，不是私有接口——
-> 私有接口对脚本一律返回 `We're sorry, but something went wrong`，带完整 Cookie 也一样。
->
-> 但换成真浏览器后，页面能正常打开、正文能看到，**评论区仍是空的**：Instagram 连自己页面里的
-> 评论请求都不放行（没有报错，就是不返回数据）。判断是账号或 IP 层面的限制，本地改不了。
->
-> 配置项保留着，等 Instagram 放行时可以直接用；拿不到只会在日志里打一行，不影响卡片其他部分。
-
-#### 从哪里拿 sessionid
-
-1. 电脑浏览器打开 <https://www.instagram.com>，确认已经登录
-2. 按 `F12` 打开开发者工具
-3. 切到 **Application** → **Cookies** → `https://www.instagram.com`
-   - Firefox：`Storage` → `Cookies`
-4. 在过滤框输入 `sessionid`，找到这一行
-5. 双击 **Value** 复制。值很长，中间会有个 `%3A`（编码后的冒号），**别改它**
-6. 填进 `instagram_cookie`，建议把整段 Cookie 都粘进去（`sessionid`、`csrftoken`、`ds_user_id` 都要）：
-
-   ```
-   sessionid=12345678%3AAbCdEfGh...
-   ```
-
-7. 保存 → 在 WebUI 里重载插件（或重启 AstrBot）
-
-> [!TIP]
-> 只认 `sessionid`，不需要 `csrftoken`。手机 App 里拿不到，必须用电脑浏览器。
-> 建议用一个专门的小号，避免主号受影响。
-
-**怎么确认成功**：群里发一个 Instagram 帖子链接，卡片下面出现评论就对了。失败会在日志里看到原因：
-
-```
-[LinkPreview] Instagram 评论获取失败：Instagram 拒绝请求：...
-```
-
-**sessionid 会过期**：退出登录、改密码、太久不用都会失效。表现是评论变空，重新复制一次即可。
 
 ### 📖 维基全文
 
