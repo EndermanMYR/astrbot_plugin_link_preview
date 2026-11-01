@@ -10,7 +10,7 @@
       "quote": {"author", "text"} | None, "sensitive": bool, "note": 附加说明,
       "comments": [{"author", "text", "likes", "time"}],   # 热门评论，拿不到就是空列表
     }
-本模块不依赖 AstrBot，方便单独测试。
+日志统一走 astrbot.api 的 logger，不再有标准库兜底。
 """
 
 import asyncio
@@ -22,12 +22,7 @@ from urllib.parse import quote, unquote, urljoin, urlsplit
 
 import httpx
 
-try:                      # 插件里跑用 AstrBot 的 logger；单独跑脚本时退回标准库
-    from astrbot.api import logger
-except Exception:         # pragma: no cover
-    import logging
-
-    logger = logging.getLogger(__name__)
+from astrbot.api import logger
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

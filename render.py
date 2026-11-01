@@ -9,12 +9,7 @@ from urllib.parse import unquote, urlsplit
 
 import jinja2
 
-try:                      # 插件里跑用 AstrBot 的 logger；单独跑脚本时退回标准库
-    from astrbot.api import logger
-except Exception:         # pragma: no cover - 只在本机调试时走到
-    import logging
-
-    logger = logging.getLogger(__name__)
+from astrbot.api import logger
 
 TEMPLATE = Path(__file__).parent / "templates" / "card.html"
 
