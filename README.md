@@ -254,7 +254,8 @@ async def main():
         pg = await b.new_page(viewport={"width": 680, "height": 900}, device_scale_factor=2)
         await pg.set_content(html, wait_until="load")
         await pg.evaluate("document.fonts.ready")
-        await (await pg.query_selector("#card")).screenshot(path="card.jpg", type="jpeg", quality=92)
+        el = await pg.query_selector("#card")
+        await el.screenshot(path="card.jpg", type="jpeg", quality=92)
         await b.close()
 
 asyncio.run(main())
