@@ -271,10 +271,13 @@ docker compose up -d
 Instagram 的正文和配图走公开的嵌入修复站，不需要登录。
 
 > [!WARNING]
-> **Instagram 评论目前大概率拿不到。** 它的私有接口对非浏览器客户端限制很严，
-> 即使带上完整 Cookie（`sessionid` + `csrftoken` + `ds_user_id`）也会返回
-> `We're sorry, but something went wrong`。实测换 IP、换域名、补 `x-csrftoken` 都没用。
-> 这个配置项保留着，接口放行时能用；拿不到会在日志里打一行原因，不影响卡片其他部分。
+> **Instagram 评论目前实测拿不到。** 走的是「登录态浏览器渲染帖子页 + 抓 DOM」，不是私有接口——
+> 私有接口对脚本一律返回 `We're sorry, but something went wrong`，带完整 Cookie 也一样。
+>
+> 但换成真浏览器后，页面能正常打开、正文能看到，**评论区仍是空的**：Instagram 连自己页面里的
+> 评论请求都不放行（没有报错，就是不返回数据）。判断是账号或 IP 层面的限制，本地改不了。
+>
+> 配置项保留着，等 Instagram 放行时可以直接用；拿不到只会在日志里打一行，不影响卡片其他部分。
 
 #### 从哪里拿 sessionid
 
