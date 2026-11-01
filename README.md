@@ -92,31 +92,69 @@ AstrBot/data/plugins/astrbot_plugin_link_preview
 
 重启 AstrBot 后即可在 WebUI 中看到插件。
 
-### 🖥️ 渲染需要什么
+### 🖥️ 浏览器：装不装都行
 
-卡片用无头浏览器截图，**不需要 Docker**，也不需要装系统依赖。按这个顺序找浏览器，第一个能用的就用：
+卡片用无头浏览器截图。插件按这个顺序找浏览器，**第一个能用的就用**：
 
 1. `browser_path` 指定的可执行文件
 2. `browser_channel` 指定的通道（`chrome` / `msedge` / `chromium`）
-3. `auto` 模式下自动找系统已装的 Chrome / Edge / Chromium
+3. `auto` 模式下自动探测系统已装的 Chrome / Edge / Chromium
 4. Playwright 自带的 Chromium
 
-所以**只要机器上本来就有 Chrome 或 Edge，`pip install playwright` 之后直接就能出图**，不用跑 `playwright install chromium`，更不用装 Docker。
+**机器上本来就有 Chrome 或 Edge 的，什么都不用做。**
+
+#### 方式一：让它自己下（默认）
+
+一个浏览器都找不到时，插件会自动跑一次 `playwright install chromium`（约 150MB，只下一次），装在 `~/.cache/ms-playwright`。下载期间那一两条卡片先用文转图，装完下次预览就正常了。
+
+由 `browser_auto_install` 控制，默认开。不想让它联网下载就关掉。
+
+#### 方式二：手动装
+
+想提前装好，或者自动下载失败时补一下：
 
 ```bash
-pip install -r requirements.txt   # httpx / jinja2 / playwright
-```
+pip install -r requirements.txt        # httpx / jinja2 / playwright
 
-想让插件用自带 Chromium 而不是系统浏览器（比如容器里已经装好）：
-
-```bash
+# 只下 Chromium（约 150MB）
 python -m playwright install chromium
+
+# Linux 缺系统库时再加这一步（需要 root）
+python -m playwright install-deps chromium
 ```
 
-`browser_channel` 设成 `playwright` 即只用自带的那份。
+各平台装系统浏览器（装了就不用下 Chromium）：
+
+| 平台 | 命令 |
+|---|---|
+| Windows | Windows 10/11 自带 Edge，或装 Chrome，无需命令行 |
+| macOS | `brew install --cask google-chrome` / `brew install --cask microsoft-edge` |
+| Debian / Ubuntu | `sudo apt install -y chromium` 或 `chromium-browser` |
+| CentOS / RHEL | `sudo dnf install -y chromium` |
+| Alpine | `apk add chromium` |
+| Docker 里的 AstrBot | 进容器执行 `python -m playwright install chromium` |
+
+#### 方式三：指定已有浏览器
+
+```json
+"browser_channel": "msedge",
+"browser_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+```
+
+`browser_path` 优先级最高，填了就用它，不看其他。
+
+#### 怎么确认在用哪个
+
+启动后日志里会有一行：
+
+```
+[LinkPreview] 浏览器已启动：{'executable_path': '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}
+```
 
 > [!NOTE]
-> 全都找不到时，会退回 AstrBot 自带的文转图服务，排版会有差异。容器里还缺 emoji 字体的话，`apt install -y fonts-noto-color-emoji`。
+> 全都找不到时会退回 AstrBot 自带的文转图服务，效果见下。注意 `t2i_strategy` 如果配成 `local`，AstrBot 会直接抛 `NotImplementedError`（本地策略只支持 Markdown，画不了 HTML）；要降级能出图，请把 t2i 配成 `remote`。
+
+**文转图的效果**：排版一致，但整页截图会留出四周空白、分辨率只有一半、数字可能变成全角宽字距。容器里缺 emoji 字体的话，再补 `apt install -y fonts-noto-color-emoji`。
 
 ## ⚙️ 配置 | Configuration
 
@@ -148,6 +186,7 @@ AstrBot WebUI -> 插件 -> 插件配置
 | `comment_count` | 卡片里显示几条热门评论，默认 `3`，最大 `10` |
 | `browser_channel` | 浏览器来源：`auto` / `chrome` / `msedge` / `chromium` / `playwright` |
 | `browser_path` | 浏览器可执行文件路径，填了优先用这个 |
+| `browser_auto_install` | 一个浏览器都没有时自动下载 Chromium，默认开 |
 
 ### 🌐 网络与抓取
 

@@ -160,13 +160,43 @@ def launch_options(channel="auto", path=""):
 class Renderer:
     """复用同一个无头浏览器；同时最多渲染两张。"""
 
-    def __init__(self, channel="auto", path=""):
+    def __init__(self, channel="auto", path="", auto_install=True):
         self._pw = None
         self._browser = None
         self._lock = asyncio.Lock()
         self._sem = asyncio.Semaphore(2)
         self._options = launch_options(channel, path)
         self._current = None
+        self._auto_install = bool(auto_install)
+        self._installing = False
+        self._install_tried = False
+
+    async def _download_browser(self):
+        """一个浏览器都找不到时，后台跑一次 playwright install chromium。
+
+        只跑一次；装在 ~/.cache/ms-playwright，容器重建后会丢，重建后会自动再来一遍。
+        """
+        if self._installing or self._install_tried:
+            return
+        self._installing = self._install_tried = True
+        logger.info("[LinkPreview] 没找到可用浏览器，开始下载 Chromium（约 150MB，只需一次）")
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "playwright", "install", "chromium",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+            )
+            out, _ = await asyncio.wait_for(proc.communicate(), 900)
+            tail = " / ".join((out or b"").decode("utf-8", "ignore").strip().splitlines()[-2:])
+            if proc.returncode == 0:
+                logger.info(f"[LinkPreview] Chromium 下载完成，下次预览生效 {tail}")
+            else:
+                logger.warning(f"[LinkPreview] Chromium 下载失败（{proc.returncode}）：{tail}")
+        except asyncio.TimeoutError:
+            logger.warning("[LinkPreview] Chromium 下载超时（15 分钟），先继续用文转图")
+        except Exception as e:
+            logger.warning(f"[LinkPreview] Chromium 下载出错：{e}")
+        finally:
+            self._installing = False
 
     async def _ensure(self):
         async with self._lock:
@@ -191,6 +221,9 @@ class Renderer:
                 except Exception as e:
                     last = e
                     logger.debug(f"[LinkPreview] 启动方式不可用 {opt}：{e}")
+            # 全都不行：有网就自己下一个，下次预览用上
+            if self._auto_install and not self._install_tried:
+                asyncio.ensure_future(self._download_browser())
             raise RuntimeError(f"没有可用的浏览器：{last}")
 
     async def render(self, html, out_path, timeout=25):

@@ -67,7 +67,8 @@ class LinkPreviewPlugin(Star):
         super().__init__(context)
         self.config = config
         self.renderer = render.Renderer(self.config.get("browser_channel", "auto"),
-                                        self.config.get("browser_path", ""))
+                                        self.config.get("browser_path", ""),
+                                        _bool(self.config.get("browser_auto_install", True), True))
         self.data_dir = Path(StarTools.get_data_dir(PLUGIN_NAME))
         self.cache_dir = self.data_dir / "cards"
         self.cache_dir.mkdir(parents=True, exist_ok=True)

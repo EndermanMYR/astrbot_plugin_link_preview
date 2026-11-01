@@ -214,6 +214,12 @@
         "default": "",
         "hint": "填了就优先用这个，比如 C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
     },
+    "browser_auto_install": {
+        "description": "找不到浏览器时自动下载",
+        "type": "bool",
+        "default": true,
+        "hint": "勾选后，一个可用浏览器都没有时会自动跑 playwright install chromium（约 150MB，只下一次），下载完下次预览生效；下载期间先用文转图"
+    },
     "steam_api_key": {
         "description": "Steam Web API Key（可选）",
         "type": "string",
