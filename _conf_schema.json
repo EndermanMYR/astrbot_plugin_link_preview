@@ -231,8 +231,8 @@
     "block_words_file": {
         "description": "敏感词表文件",
         "type": "string",
-        "default": "data/sensitive_words/political.txt",
-        "hint": "相对 AstrBot 工作目录。文件不存在时会用插件自带的政治敏感词表创建。每行一个词，# 开头是注释，改完立即生效"
+        "default": "",
+        "hint": "留空则用插件数据目录下的 political.txt（随插件数据一起备份迁移）。也可以填绝对路径或相对 AstrBot 工作目录的路径。文件不存在时用插件自带的政治敏感词表创建；每行一个词，# 开头是注释，改完立即生效"
     },
     "block_words": {
         "description": "额外屏蔽词",
@@ -271,8 +271,8 @@
     "r18_words_file": {
         "description": "R18 词表文件",
         "type": "string",
-        "default": "data/sensitive_words/r18.txt",
-        "hint": "相对 AstrBot 工作目录；不存在时用插件自带的词表创建（合并了插件内置词表和你在配置里维护的词）。改完立即生效"
+        "default": "",
+        "hint": "留空则用插件数据目录下的 r18.txt（随插件数据一起备份迁移）。也可以填绝对路径或相对 AstrBot 工作目录的路径；不存在时用插件自带的词表创建（合并了插件内置词表和你在配置里维护的词）。改完立即生效"
     },
     "r18_words": {
         "description": "额外 R18 词",

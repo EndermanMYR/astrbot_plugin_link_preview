@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import re
+import shutil
 import time
 from pathlib import Path
 
@@ -24,9 +25,12 @@ HELP = """外链预览
 能拿到评论的平台：YouTube、TikTok、X（需配置 X 浏览器服务，较慢）、GitHub Issue/PR、Bluesky、pixiv。Instagram、Reddit 拿不到评论。"""
 
 PLUGIN_NAME = "astrbot_plugin_link_preview"
-# 敏感词表（相对 AstrBot 工作目录）
-DEFAULT_WORDS_FILE = "data/sensitive_words/political.txt"
-DEFAULT_R18_FILE = "data/sensitive_words/r18.txt"
+# 词表默认放在插件数据目录（data/plugin_data/<插件名>/）下，随插件数据一起迁移和审计。
+WORDS_NAME = "political.txt"
+R18_NAME = "r18.txt"
+# 旧版本把词表写在 data/sensitive_words/，只在迁移时读取一次，不再往那里写。
+LEGACY_WORDS_FILE = "data/sensitive_words/political.txt"
+LEGACY_R18_FILE = "data/sensitive_words/r18.txt"
 BLOCK_NOTICE = "这个链接的内容包含屏蔽词，不予预览。"
 SEND_FAIL_NOTICE = "这张预览卡片发送失败（可能被 QQ 拦截了），请直接点链接查看。"
 REPLY_BLOCK_NOTICE = "（这条回复包含屏蔽词，已拦截）"
@@ -75,23 +79,42 @@ class LinkPreviewPlugin(Star):
         self._recent = {}      # (会话, 链接) -> 上次预览时间，用来去重
         self._last_link = {}   # 会话 -> 最近一次预览的 (平台, 链接)，给 /评论 用
         self._x_replies = {}   # 帖子 ID -> (时间, 回复列表)；后台没等完的结果留给 /评论 用
-        words_file = str(self.config.get("block_words_file", DEFAULT_WORDS_FILE) or "").strip()
+        words_file = self._words_path("block_words_file", WORDS_NAME, LEGACY_WORDS_FILE)
         try:
-            self.filter = wordfilter.WordFilter(words_file or None, self.config.get("block_words") or [])
-            logger.info(f"[LinkPreview] 敏感词表已加载 {self.filter.count} 个词")
+            self.filter = wordfilter.WordFilter(words_file, self.config.get("block_words") or [])
+            logger.info(f"[LinkPreview] 敏感词表已加载 {self.filter.count} 个词：{words_file}")
         except OSError as e:
             logger.error(f"[LinkPreview] 敏感词表加载失败：{e}")
             self.filter = wordfilter.WordFilter(None, self.config.get("block_words") or [])
-        r18_file = str(self.config.get("r18_words_file", DEFAULT_R18_FILE) or "").strip()
+        r18_file = self._words_path("r18_words_file", R18_NAME, LEGACY_R18_FILE)
         try:
-            self.r18 = wordfilter.WordFilter(r18_file or None, self.config.get("r18_words") or [], wordfilter.BUNDLED_R18)
-            logger.info(f"[LinkPreview] R18 词表已加载 {self.r18.count} 个词")
+            self.r18 = wordfilter.WordFilter(r18_file, self.config.get("r18_words") or [], wordfilter.BUNDLED_R18)
+            logger.info(f"[LinkPreview] R18 词表已加载 {self.r18.count} 个词：{r18_file}")
         except OSError as e:
             logger.error(f"[LinkPreview] R18 词表加载失败：{e}")
             self.r18 = wordfilter.WordFilter(None, self.config.get("r18_words") or [], wordfilter.BUNDLED_R18)
 
     async def terminate(self):
         await self.renderer.close()
+
+    def _words_path(self, key, name, legacy):
+        """词表路径：配置留空就用插件数据目录下的文件。
+
+        旧版本把词表写在 data/sensitive_words/ 里，第一次升级时把旧文件复制过来，
+        之后只读写插件数据目录，不再碰旧位置（旧文件保留，避免影响别的插件）。
+        """
+        raw = str(self.config.get(key, "") or "").strip()
+        if raw:
+            return raw
+        path = self.data_dir / name
+        old = Path(legacy)
+        if not path.exists() and old.exists():
+            try:
+                shutil.copyfile(old, path)
+                logger.info(f"[LinkPreview] 已把旧词表 {old} 迁移到 {path}")
+            except OSError as e:
+                logger.warning(f"[LinkPreview] 迁移旧词表失败：{e}")
+        return str(path)
 
     # ------------------------------------------------------------------ 配置
 

@@ -154,13 +154,13 @@ AstrBot WebUI -> 插件 -> 插件配置
 | 配置项 | 说明 |
 |--------|------|
 | `block_enabled` | 启用敏感词屏蔽 |
-| `block_words_file` | 词表文件，默认 `data/sensitive_words/political.txt` |
+| `block_words_file` | 词表文件；留空用插件数据目录下的 `political.txt` |
 | `block_words` | 额外屏蔽词 |
 | `block_mode` | 命中后怎么处理：`整条不发` / `打码后发送` |
 | `block_outgoing` | 机器人自己的回复也检查，默认开 |
 | `r18_enabled` | 启用 R18 过滤 |
 | `r18_block_flagged` | 平台标记为敏感的也整条不发 |
-| `r18_words_file` | R18 词表，默认 `data/sensitive_words/r18.txt` |
+| `r18_words_file` | R18 词表；留空用插件数据目录下的 `r18.txt` |
 | `r18_outgoing` | 机器人自己的回复也查 R18，默认关 |
 | `block_notice` | 被拦截或发不出去时在群里提醒 |
 
@@ -181,7 +181,9 @@ AstrBot WebUI -> 插件 -> 插件配置
 
 ### 🛡️ 敏感词与 R18
 
-- 词表文件默认是 `data/sensitive_words/political.txt`（相对 AstrBot 工作目录），第一次加载时用插件自带的 `sensitive_words.txt` 创建，之后改这个文件即可，改完立即生效
+- 词表默认放在插件数据目录：`data/plugin_data/astrbot_plugin_link_preview/political.txt`，第一次加载时用插件自带的 `sensitive_words.txt` 创建，之后改这个文件即可，改完立即生效
+- 从旧版本升级时，如果插件数据目录里还没有词表、而旧位置 `data/sensitive_words/political.txt` 存在，会先复制一份过来再继续；旧文件保留不动
+- 想放在别处，把 `block_words_file` 填成绝对路径或相对 AstrBot 工作目录的路径即可
 - 自带词表约 150 个政治敏感词（简繁体），刻意避开了「64」「民主」这类会大量误伤的短词
 - 中文词去掉空格、间隔号、星号等插字后匹配；英文词按整词匹配
 - 正文、标题、作者命中：默认整条不发，也可以设成打码后发送；评论命中只去掉那一条
