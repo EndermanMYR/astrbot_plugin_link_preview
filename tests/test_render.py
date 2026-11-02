@@ -82,6 +82,38 @@ class TestMediaLayout(unittest.TestCase):
         self.assertNotIn(" stack", render.build_html(card, "dark").split("<body")[1][:2000])
 
 
+class TestBrandAccent(unittest.TestCase):
+    """品牌色在深浅主题下都要看得见。"""
+
+    def test_black_brand_lightened_on_dark(self):
+        self.assertNotEqual(render.accent_for("#000000", "dark"), "#000000")
+
+    def test_black_brand_kept_on_light(self):
+        self.assertEqual(render.accent_for("#000000", "light"), "#000000")
+
+    def test_saturated_colors_untouched(self):
+        for c in ("#ff0000", "#0066dc", "#9146ff", "#1db954"):
+            self.assertEqual(render.accent_for(c, "dark"), c, c)
+            self.assertEqual(render.accent_for(c, "light"), c, c)
+
+    def test_invalid_color_falls_back(self):
+        self.assertEqual(render.accent_for("", "dark"), "#7c5cff")
+        self.assertEqual(render.accent_for("red", "dark"), "#7c5cff")
+
+    def test_every_platform_has_valid_brand_color(self):
+        import fetchers
+
+        for key, (name, color) in fetchers.PLATFORMS.items():
+            self.assertRegex(color, r"^#[0-9a-f]{6}$", f"{name} 颜色格式不对")
+            for theme in ("dark", "light"):
+                self.assertRegex(render.accent_for(color, theme), r"^#[0-9a-f]{6}$")
+
+    def test_card_uses_adjusted_color(self):
+        card = dict(CARD, color="#000000")
+        self.assertIn("#949494", render.build_html(card, "dark"))
+        self.assertIn("--accent: #000000", render.build_html(card, "light"))
+
+
 class TestTranslationBlock(unittest.TestCase):
     def test_renders_translation_block(self):
         card = dict(CARD, translation="这是译文")

@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import re
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -128,10 +129,40 @@ def build_article_html(article, blocks, no, total, hidden=0, theme="dark"):
                       theme="light" if theme == "light" else "dark")
 
 
+def _luminance(hex_color):
+    """相对亮度（WCAG 公式），用来判断品牌色在卡片背景上够不够显眼。"""
+    def ch(v):
+        v /= 255
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
+    return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b)
+
+
+def accent_for(color, theme="dark"):
+    """按主题修正品牌色：纯黑的品牌（X、GitHub、维基）在深色卡片上要调亮，
+    接近白色的在浅色卡片上要压暗，否则那一条渐变和徽章就看不见了。
+    """
+    c = str(color or "").strip()
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", c):
+        return "#7c5cff"
+    lum = _luminance(c)
+    rgb = [int(c[i:i + 2], 16) for i in (1, 3, 5)]
+    if theme == "light":
+        if lum > 0.75:
+            rgb = [round(v * 0.55) for v in rgb]
+    elif lum < 0.06:
+        # 只有接近纯黑的品牌色才调亮；饱和色（如 Dailymotion 的蓝）本身就够显眼
+        rgb = [round(v + (255 - v) * 0.58) for v in rgb]
+    return "#%02x%02x%02x" % tuple(rgb)
+
+
 def build_html(card, theme="dark", t2i=True):
     """渲染成 HTML 字符串。t2i=True 时套用文转图的版式（铺满 800 宽视口）。"""
     tpl = _env.from_string(TEMPLATE.read_text(encoding="utf-8"))
-    return tpl.render(c=card, theme="light" if theme == "light" else "dark", t2i=t2i)
+    theme = "light" if theme == "light" else "dark"
+    c = dict(card, color=accent_for(card.get("color"), theme))
+    return tpl.render(c=c, theme=theme, t2i=t2i)
 
 
 # ---------------------------------------------------------------------------

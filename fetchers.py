@@ -36,26 +36,28 @@ EMBED_BOT_UA = "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com
 
 # 平台显示名和主色
 PLATFORMS = {
-    "x": ("X", "#1d9bf0"),
-    "youtube": ("YouTube", "#ff0033"),
+    # 平台名 -> (显示名, 品牌色)。品牌色是纯黑的（X、GitHub、Wikipedia 等），
+    # 渲染时会按主题自动调亮/调暗，保证在深色卡片上看得见。
+    "x": ("X", "#000000"),
+    "youtube": ("YouTube", "#ff0000"),
     "reddit": ("Reddit", "#ff4500"),
-    "github": ("GitHub", "#8b949e"),
-    "bluesky": ("Bluesky", "#1185fe"),
+    "github": ("GitHub", "#181717"),
+    "bluesky": ("Bluesky", "#0085ff"),
     "pixiv": ("pixiv", "#0096fa"),
     "steam": ("Steam", "#66c0f4"),
-    "wikipedia": ("Wikipedia", "#c8ccd1"),
-    "wikisource": ("维基文库", "#b49a5e"),
+    "wikipedia": ("Wikipedia", "#000000"),
+    "wikisource": ("维基文库", "#000000"),
     "tiktok": ("TikTok", "#fe2c55"),
-    "spotify": ("Spotify", "#1ed760"),
+    "spotify": ("Spotify", "#1db954"),
     "vimeo": ("Vimeo", "#1ab7ea"),
     "soundcloud": ("SoundCloud", "#ff5500"),
-    "instagram": ("Instagram", "#e1306c"),
-    "threads": ("Threads", "#a0a0a0"),
+    "instagram": ("Instagram", "#e4405f"),
+    "threads": ("Threads", "#000000"),
     "twitch": ("Twitch", "#9146ff"),
     "facebook": ("Facebook", "#1877f2"),
     "dailymotion": ("Dailymotion", "#0066dc"),
-    "niconico": ("niconico", "#9a9a9a"),
-    "web": ("网页", "#a98bff"),
+    "niconico": ("niconico", "#252525"),
+    "web": ("网页", "#7c5cff"),
 }
 
 # 只取元信息（OpenGraph）的站点：域名 -> 平台 key
