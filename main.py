@@ -143,8 +143,8 @@ class LinkPreviewPlugin(Star):
         if raw:
             return raw
         path = self.data_dir / name
-        old = Path(legacy)
-        if not path.exists() and old.exists():
+        old = Path(legacy) if legacy else None
+        if old is not None and not path.exists() and old.exists():
             try:
                 shutil.copyfile(old, path)
                 logger.info(f"[LinkPreview] 已把旧词表 {old} 迁移到 {path}")
