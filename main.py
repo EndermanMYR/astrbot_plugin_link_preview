@@ -22,7 +22,7 @@ HELP = """外链预览
 群里发 YouTube / TikTok / Instagram / X / GitHub / Reddit / Bluesky / pixiv / Steam / 维基百科 / 维基文库 / Dailymotion / niconico / Spotify 等链接，会自动回一张预览卡片（带几条热门评论）。
 /预览 链接：手动预览任意网页链接（也可用 /preview）
 /评论 [链接]：单独看一条链接的评论，最多 10 条；不带链接时用本群最近预览过的那条（也可用 /comments）
-/翻译 [链接]：把这条链接的标题和正文翻译成中文，出一张带译文的卡片（也可用 /translate）
+/翻译 [链接]：把这条链接的标题和正文翻译成中文。刚预览过的链接只补一段译文，不重复发卡（也可用 /translate）
 /全文 [维基链接]：把维基百科词条或维基文库作品的全文分页，合并转发发出（也可用 /维基全文）
 /预览图片 [开/关/默认]：管理员切换本群卡片是否显示配图和封面，不带参数查看当前状态
 /预览帮助：查看这条帮助
@@ -315,6 +315,27 @@ class LinkPreviewPlugin(Star):
                 data = seg.data if isinstance(seg.data, str) else json.dumps(seg.data, ensure_ascii=False)
                 parts.append(data.replace("\\/", "/"))
         return "\n".join(parts)
+
+    def _previewed_recently(self, session, url, seconds=None):
+        """这条链接是不是刚预览过（用于 /翻译 时避免重复出卡）。"""
+        window = _int(self.config.get("dedupe_seconds", 30), 30, 0, 86400)
+        seconds = window if seconds is None else seconds
+        key = (session, fetchers.canonical_url(url))
+        return time.time() - self._recent.get(key, 0) < max(seconds, 5)
+
+    async def _translate_only(self, event, platform, url):
+        """只抓取并翻译，不渲染卡片。"""
+        timeout = _int(self.config.get("fetch_timeout", 12), 12, 3, 60)
+        async with fetchers.make_client(self.config.get("proxy") or None, timeout) as client:
+            card = await fetchers.fetch(
+                client, platform, url,
+                github_token=self.config.get("github_token") or None,
+                comments=0,
+                steam_api_key=self.config.get("steam_api_key") or None,
+                x_service=self._x_service() if platform == "x" else None,
+            )
+        card = self._filter_card(card)
+        return await self._translate_card(card, event.unified_msg_origin)
 
     def _duplicate(self, session, url):
         window = _int(self.config.get("dedupe_seconds", 30), 30, 0, 86400)
@@ -624,6 +645,25 @@ class LinkPreviewPlugin(Star):
         if not links:
             yield event.plain_result("用法：/翻译 链接（也可以先发一次链接，再发 /翻译）")
             return
+
+        platform, url = links[0]
+        # 这条刚自动预览过：只补一段译文，避免同一张卡发两遍
+        if self._previewed_recently(event.unified_msg_origin, url):
+            try:
+                translated = await self._translate_only(event, platform, url)
+            except Blocked as e:
+                yield event.plain_result(e.notice or BLOCK_NOTICE)
+                return
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"[LinkPreview] 翻译失败：{e}")
+                yield event.plain_result(f"翻译失败：{e}")
+                return
+            if not translated:
+                yield event.plain_result("这条没有可翻译的正文")
+                return
+            yield event.plain_result(f"译文：\n{translated}")
+            return
+
         async for res in self._preview(event, links[:1], quiet=False, translate=True):
             yield res
 
