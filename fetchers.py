@@ -1320,7 +1320,7 @@ query($login:String!){
   }
 }"""
 TWITCH_CLIP_Q = """
-query($slug:String!){
+query($slug:ID!){
   clip(slug:$slug){
     title durationSeconds viewCount createdAt thumbnailURL(width:1280,height:720)
     broadcaster{ displayName login }
