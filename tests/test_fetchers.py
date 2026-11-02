@@ -121,6 +121,40 @@ def fetchers_icons():
     return render.ICONS
 
 
+class TestLinkDedupe(unittest.TestCase):
+    """同一条帖子带参数、换镜像域名，都只能算一条。"""
+
+    def test_tracking_params_ignored(self):
+        txt = ("https://x.com/a/status/123?a=xx&s=20 "
+               "https://x.com/a/status/123")
+        self.assertEqual(len(fetchers.find_links(txt, ALL_ON, 5)), 1)
+
+    def test_mirror_hosts_collapsed(self):
+        for mirror in ("twitter.com", "vxtwitter.com", "fixupx.com"):
+            txt = f"https://{mirror}/a/status/123 https://x.com/a/status/123"
+            self.assertEqual(len(fetchers.find_links(txt, ALL_ON, 5)), 1, mirror)
+
+    def test_youtu_be_matches_watch_url(self):
+        txt = "https://youtu.be/dQw4w9WgXcQ https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        self.assertEqual(len(fetchers.find_links(txt, ALL_ON, 5)), 1)
+
+    def test_different_posts_still_separate(self):
+        txt = "https://youtu.be/dQw4w9WgXcQ https://youtu.be/aaaaaaaaaaa"
+        self.assertEqual(len(fetchers.find_links(txt, ALL_ON, 5)), 2)
+
+    def test_same_owner_different_repos(self):
+        txt = "https://github.com/o/r1 https://github.com/o/r2"
+        self.assertEqual(len(fetchers.find_links(txt, ALL_ON, 5)), 2)
+
+    def test_canonical_url_shape(self):
+        self.assertEqual(
+            fetchers.canonical_url("https://x.com/a/status/1?a=1&s=20#top"),
+            "https://x.com/a/status/1")
+        self.assertEqual(
+            fetchers.canonical_url("https://twitter.com/a/status/1/"),
+            "https://x.com/a/status/1")
+
+
 class TestFormatting(unittest.TestCase):
     def test_compact(self):
         self.assertEqual(fetchers.compact(1234), "1,234")

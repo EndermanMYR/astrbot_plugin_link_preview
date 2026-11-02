@@ -323,7 +323,7 @@ class LinkPreviewPlugin(Star):
         for k, t in list(self._recent.items()):
             if now - t > max(window, 60):
                 self._recent.pop(k, None)
-        key = (session, url)
+        key = (session, fetchers.canonical_url(url))
         if window and now - self._recent.get(key, 0) < window:
             return True
         self._recent[key] = now
@@ -453,6 +453,7 @@ class LinkPreviewPlugin(Star):
         self._clean_cache()
         session = event.unified_msg_origin
         for platform, url in links:
+            logger.info(f"[LinkPreview] 开始预览 {platform} {url}")
             try:
                 path = await self._make_card_image(platform, url, comments_mode, session, translate)
             except Blocked as e:
@@ -482,11 +483,17 @@ class LinkPreviewPlugin(Star):
         if "http" not in text.lower() and not any(isinstance(s, Comp.Json) for s in event.get_messages() or []):
             return
         limit = _int(self.config.get("max_links_per_message", 2), 2, 1, 5)
-        links = fetchers.find_links(self._message_text(event), self._platforms(), limit)
+        found = fetchers.find_links(self._message_text(event), self._platforms(), limit)
         session = event.unified_msg_origin
-        links = [(p, u) for p, u in links if not self._duplicate(session, u)]
+        links = []
+        for p, u in found:
+            if self._duplicate(session, u):
+                logger.info(f"[LinkPreview] 跳过重复链接：{u}")
+            else:
+                links.append((p, u))
         if not links:
             return
+        logger.info(f"[LinkPreview] 自动预览 {len(links)} 条：" + " | ".join(u for _, u in links))
         async for res in self._preview(event, links):
             yield res
 

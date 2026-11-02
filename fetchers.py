@@ -18,7 +18,7 @@ import html as htmllib
 import json
 import re
 from datetime import datetime, timedelta, timezone
-from urllib.parse import quote, unquote, urljoin, urlsplit
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urljoin, urlsplit, urlunsplit
 
 import httpx
 
@@ -112,6 +112,42 @@ class FetchError(Exception):
     pass
 
 
+# 各平台分享链接里带的跟踪参数，比较「是不是同一条」时要忽略
+TRACKING_PARAMS = {
+    "a", "s", "t", "ref", "ref_src", "ref_url", "si", "igshid", "share", "share_id",
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "feature", "fbclid", "gclid", "spm", "from", "share_source",
+}
+# 同一个帖子的不同域名，归一到一个，避免同一条链接被预览两次
+HOST_ALIASES = {
+    "twitter.com": "x.com", "mobile.twitter.com": "x.com",
+    "vxtwitter.com": "x.com", "fxtwitter.com": "x.com",
+    "fixupx.com": "x.com", "fixvx.com": "x.com",
+    "youtu.be": "youtube.com", "m.youtube.com": "youtube.com",
+    "music.youtube.com": "youtube.com",
+}
+
+
+def canonical_url(url):
+    """把链接归一成「同一个帖子」的形式：去跟踪参数、去锚点、统一镜像域名。
+
+    QQ 分享卡片里的链接常带 ?a=xxx&s=20，正文里又是干净的，
+    不归一的话同一条帖子会被识别成两条、出两张卡。
+    """
+    try:
+        u = urlsplit(str(url or "").strip())
+    except ValueError:
+        return str(url or "")
+    host = (u.hostname or "").lower()
+    host = HOST_ALIASES.get(host, host)
+    if host.startswith("www."):
+        host = host[4:]
+    query = [(k, v) for k, v in parse_qsl(u.query, keep_blank_values=True)
+             if k.lower() not in TRACKING_PARAMS]
+    path = u.path.rstrip("/") or "/"
+    return urlunsplit(("https", host, path, urlencode(query), ""))
+
+
 def find_links(text, enabled, limit=3):
     """从文本里找出可预览的链接，返回 [(平台 key, 链接)]，同一链接只取一次。"""
     found, seen = [], set()
@@ -126,8 +162,10 @@ def find_links(text, enabled, limit=3):
             platform = OG_SITES.get(_host(url), "web") if key == "og" else key
             if platform == "github" and m.group(1).lower() in GITHUB_RESERVED:
                 break
-            if enabled.get(platform, False) and url not in seen:
-                seen.add(url)
+            ident = "|".join(g for g in m.groups() if g)
+            key = (platform, ident) if ident else (platform, canonical_url(url))
+            if enabled.get(platform, False) and key not in seen:
+                seen.add(key)
                 found.append((platform, url))
             break
         if len(found) >= limit:
