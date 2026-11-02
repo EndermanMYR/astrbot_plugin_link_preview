@@ -1,7 +1,13 @@
 services:
   xbrowser:
-    build: .
-    image: astrbot-xbrowser:latest
+    # 默认用 GitHub Actions 构建好的镜像，省掉本地 10 分钟的 chromium + pip 安装；
+    # 拉不到（没网、镜像还没发布）会自动退回本地构建，所以没有 Docker Hub 账号也能用
+    image: ${XBROWSER_IMAGE:-ghcr.io/endermanmyr/astrbot-xbrowser:latest}
+    build:
+      context: .
+      args:
+        # 国内构建慢/卡住时，在 .env 里设 PIP_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
+        PIP_INDEX: ${PIP_INDEX:-}
     restart: unless-stopped
     init: true
     user: "${LOGIN_UID:-1000}:${LOGIN_GID:-1000}"
@@ -10,7 +16,6 @@ services:
     environment:
       X_LOGIN_SERVICE_TOKEN: ${X_LOGIN_SERVICE_TOKEN:?请在 .env 配置至少 32 字符的 Token}
       X_COOKIE_FILE: /cookies/x_cookies.json
-      # 空闲这么久没有请求就关掉浏览器，把内存还给系统
       # 空闲多久关掉浏览器。调大能减少冷启动（冷启动要多花 8~10 秒），代价是常驻内存
       X_SCRAPER_IDLE: ${X_SCRAPER_IDLE:-1800}
     volumes:
