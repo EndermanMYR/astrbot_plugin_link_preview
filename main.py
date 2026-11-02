@@ -119,6 +119,13 @@ class LinkPreviewPlugin(Star):
         """插件被激活时调用；这里才保证有事件循环，用来写入手填的 Cookie。"""
         if _cookie_pair(self.config.get("x_cookie", "")):
             await self._push_cookie()
+        # 填了 Cookie 却没配服务地址，评论永远出不来，给一句明确的提示（卡片本身不受影响）
+        service, token = self._x_service()
+        if _cookie_pair(self.config.get("x_cookie", "")) and not (service and token):
+            logger.warning(
+                "[LinkPreview] 填了 x_cookie 但没配 x_browser_url / x_browser_token，"
+                "X 热门评论不会显示；卡片正文和配图不受影响。部署方法见 README 的「X 评论」一节"
+            )
 
     async def terminate(self):
         await self.renderer.close()
