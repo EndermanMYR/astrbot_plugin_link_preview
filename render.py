@@ -1,9 +1,7 @@
-"""把卡片字典画成图片：图片先下载内联成 data URI，再用本机 Chromium 截图。"""
+"""把卡片字典变成 HTML，交给 AstrBot 的文转图服务出图，再裁掉多余留白。"""
 
 import asyncio
 import base64
-import os
-import sys
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -101,159 +99,51 @@ def build_article_html(article, blocks, no, total, hidden=0, theme="dark"):
                       theme="light" if theme == "light" else "dark")
 
 
-def build_html(card, theme="dark"):
+def build_html(card, theme="dark", t2i=True):
+    """渲染成 HTML 字符串。t2i=True 时套用文转图的版式（铺满 800 宽视口）。"""
     tpl = _env.from_string(TEMPLATE.read_text(encoding="utf-8"))
-    return tpl.render(c=card, theme="light" if theme == "light" else "dark")
+    return tpl.render(c=card, theme="light" if theme == "light" else "dark", t2i=t2i)
 
 
-# 常见系统浏览器的安装位置：没装 Playwright 自带 Chromium 时按顺序试
-SYSTEM_BROWSERS = {
-    "win32": [
-        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-    ],
-    "darwin": [
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-        "/Applications/Chromium.app/Contents/MacOS/Chromium",
-    ],
-    "linux": [
-        "/usr/bin/chromium",
-        "/usr/bin/chromium-browser",
-        "/usr/bin/google-chrome",
-        "/usr/bin/google-chrome-stable",
-        "/usr/bin/microsoft-edge",
-    ],
-}
+# ---------------------------------------------------------------------------
+# 文转图（AstrBot 的 html_render）：远端服务固定 800 宽视口、DPR 1，
+# 忽略 device_scale_factor，高度会随内容延伸但不会小于 720。
+# 所以模板里让卡片铺满 800 宽（body.t2i），出图后再裁掉多余留白。
 
-LAUNCH_ARGS = ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--disable-extensions"]
+def t2i_options():
+    """交给 AstrBot 文转图服务的截图参数。"""
+    return {"type": "jpeg", "quality": 92, "full_page": True}
 
 
-def launch_options(channel="auto", path=""):
-    """按优先级列出浏览器启动方式。
+def crop_image(path, pad=8, threshold=10):
+    """裁掉四周与背景色相同的留白。
 
-    指定路径 > 指定通道（chrome/msedge/chromium）> 自动找系统浏览器 > Playwright 自带的。
-    这样机器上只要有 Chrome/Edge 就能渲染，不必装 Docker，也不用跑 playwright install-deps。
+    远端视口高度固定 720，矮卡片下方会留一大片纯背景色；左右也可能有边距。
+    这里按「与左上角背景色的差异」求包围盒，再留一点阴影边距。
     """
-    out = []
-    path = str(path or "").strip()
-    if path:
-        out.append({"executable_path": path})
-    ch = str(channel or "auto").strip().lower()
-    if ch in ("chrome", "msedge", "chromium"):
-        out.append({"channel": ch})
-    elif ch == "auto":
-        for p in SYSTEM_BROWSERS.get(sys.platform, SYSTEM_BROWSERS["linux"]):
-            if os.path.exists(p):
-                out.append({"executable_path": p})
-    out.append({})        # 兜底：Playwright 自带的 Chromium
-    return out
+    from PIL import Image, ImageChops
 
+    try:
+        im = Image.open(path).convert("RGB")
+    except (OSError, ValueError):
+        return path
+    w, h = im.size
+    if w < 8 or h < 8:
+        return path
 
-class Renderer:
-    """复用同一个无头浏览器；同时最多渲染两张。"""
+    bg = im.getpixel((2, 2))
+    diff = ImageChops.difference(im, Image.new("RGB", im.size, bg)).convert("L")
+    mask = diff.point(lambda v: 255 if v > threshold else 0)
+    box = mask.getbbox()
+    if not box:
+        return path
 
-    def __init__(self, channel="auto", path="", auto_install=True):
-        self._pw = None
-        self._browser = None
-        self._lock = asyncio.Lock()
-        self._sem = asyncio.Semaphore(2)
-        self._options = launch_options(channel, path)
-        self._current = None
-        self._auto_install = bool(auto_install)
-        self._installing = False
-        self._install_tried = False
+    left = max(0, box[0] - pad)
+    top = max(0, box[1] - pad)
+    right = min(w, box[2] + pad)
+    bottom = min(h, box[3] + pad)
+    if (left, top, right, bottom) == (0, 0, w, h):
+        return path
 
-    async def _run_playwright(self, *args, timeout=900):
-        """跑一条 playwright 命令，成功返回 True。"""
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                sys.executable, "-m", "playwright", *args,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-            )
-            out, _ = await asyncio.wait_for(proc.communicate(), timeout)
-            tail = " / ".join((out or b"").decode("utf-8", "ignore").strip().splitlines()[-2:])
-            if proc.returncode == 0:
-                logger.info(f"[LinkPreview] playwright {' '.join(args)} 完成 {tail}")
-                return True
-            logger.warning(f"[LinkPreview] playwright {' '.join(args)} 失败（{proc.returncode}）：{tail}")
-        except asyncio.TimeoutError:
-            logger.warning(f"[LinkPreview] playwright {' '.join(args)} 超时")
-        except Exception as e:
-            logger.warning(f"[LinkPreview] playwright {' '.join(args)} 出错：{e}")
-        return False
-
-    async def _download_browser(self):
-        """一个浏览器都找不到时，后台跑一次 playwright install chromium。
-
-        只跑一次；装在 ~/.cache/ms-playwright，容器重建后会丢，重建后会自动再来一遍。
-        """
-        if self._installing or self._install_tried:
-            return
-        self._installing = self._install_tried = True
-        logger.info("[LinkPreview] 没找到可用浏览器，开始下载 Chromium（约 150MB，只需一次）")
-        try:
-            ok = await self._run_playwright("install", "chromium", timeout=900)
-            # 精简镜像里只有浏览器二进制、没有系统库，装完也起不来，顺手补上（需要 root）
-            if ok and sys.platform.startswith("linux") and hasattr(os, "geteuid") and os.geteuid() == 0:
-                logger.info("[LinkPreview] 补装 Chromium 的系统依赖（apt，可能要几分钟）")
-                await self._run_playwright("install-deps", "chromium", timeout=900)
-        except asyncio.TimeoutError:
-            logger.warning("[LinkPreview] Chromium 下载超时（15 分钟），先继续用文转图")
-        except Exception as e:
-            logger.warning(f"[LinkPreview] Chromium 下载出错：{e}")
-        finally:
-            self._installing = False
-
-    async def _ensure(self):
-        async with self._lock:
-            if self._browser and self._browser.is_connected():
-                return self._browser
-            from playwright.async_api import async_playwright
-
-            if self._pw is None:
-                self._pw = await async_playwright().start()
-            # 上次成功的那个优先重试，失败再按顺序降级
-            order = ([self._current] if self._current else []) + [
-                o for o in self._options if o != self._current
-            ]
-            last = None
-            for opt in order:
-                try:
-                    self._browser = await self._pw.chromium.launch(args=LAUNCH_ARGS, **opt)
-                    if opt != self._current:
-                        logger.info(f"[LinkPreview] 浏览器已启动：{opt or 'Playwright 自带 Chromium'}")
-                    self._current = opt
-                    return self._browser
-                except Exception as e:
-                    last = e
-                    logger.debug(f"[LinkPreview] 启动方式不可用 {opt}：{e}")
-            # 全都不行：有网就自己下一个，下次预览用上
-            if self._auto_install and not self._install_tried:
-                asyncio.ensure_future(self._download_browser())
-            raise RuntimeError(f"没有可用的浏览器：{last}")
-
-    async def render(self, html, out_path, timeout=25):
-        browser = await self._ensure()
-        async with self._sem:
-            page = await browser.new_page(viewport={"width": 680, "height": 600}, device_scale_factor=2)
-            try:
-                await page.set_content(html, wait_until="load", timeout=timeout * 1000)
-                await page.evaluate("document.fonts.ready")
-                el = await page.query_selector("#card")
-                await el.screenshot(path=str(out_path), type="jpeg", quality=90, timeout=timeout * 1000)
-            finally:
-                await page.close()
-        return out_path
-
-    async def close(self):
-        try:
-            if self._browser:
-                await self._browser.close()
-            if self._pw:
-                await self._pw.stop()
-        except Exception:
-            pass
-        self._browser = self._pw = None
+    im.crop((left, top, right, bottom)).save(path, "JPEG", quality=92)
+    return path

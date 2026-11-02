@@ -85,9 +85,6 @@ class LinkPreviewPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
-        self.renderer = render.Renderer(self.config.get("browser_channel", "auto"),
-                                        self.config.get("browser_path", ""),
-                                        _bool(self.config.get("browser_auto_install", True), True))
         self.data_dir = Path(StarTools.get_data_dir(PLUGIN_NAME))
         self.cache_dir = self.data_dir / "cards"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -128,7 +125,7 @@ class LinkPreviewPlugin(Star):
             )
 
     async def terminate(self):
-        await self.renderer.close()
+        pass
 
     def _words_path(self, key, name, legacy):
         """词表路径：配置留空就用插件数据目录下的文件。
@@ -345,6 +342,40 @@ class LinkPreviewPlugin(Star):
             return bool(self._img_switch[session])
         return _bool(self.config.get("show_images", True), True)
 
+    async def _t2i(self, tmpl_path, data, out, attempts=3):
+        """用 AstrBot 的文转图服务出图，失败重试，再裁掉多余留白。
+
+        远端服务偶尔 503，重试一两次基本能过；裁边是因为它的视口高度固定 720，
+        矮卡片下方会留一大片纯背景色。
+        """
+        tmpl = tmpl_path.read_text(encoding="utf-8")
+        timeout = _int(self.config.get("render_timeout", 25), 25, 5, 120)
+        last = None
+        for i in range(attempts):
+            try:
+                path = await asyncio.wait_for(
+                    self.html_render(tmpl, data, return_url=False, options=render.t2i_options()),
+                    timeout,
+                )
+                shutil.copyfile(path, out)
+                render.crop_image(str(out))
+                return str(out)
+            except Exception as e:
+                last = e
+                logger.warning(f"[LinkPreview] 文转图失败（第 {i + 1}/{attempts} 次）：{e}")
+                if i + 1 < attempts:
+                    await asyncio.sleep(1.2 * (i + 1))
+        raise RuntimeError(f"文转图服务不可用：{last}")
+
+    async def _render_html(self, tmpl_path, card, out):
+        theme = "light" if self.config.get("theme") == "light" else "dark"
+        return await self._t2i(tmpl_path, {"c": card, "theme": theme, "t2i": True}, out)
+
+    async def _render_page(self, article, blocks, no, total, hidden, theme, out):
+        data = {"a": article, "blocks": blocks, "no": no, "total": total, "hidden": hidden,
+                "theme": "light" if theme == "light" else "dark", "t2i": True}
+        return await self._t2i(render.ARTICLE, data, out)
+
     async def _make_card_image(self, platform, url, comments_mode=False, session=None):
         """抓取 + 渲染，返回图片路径；失败返回 None。"""
         n_comments = 10 if comments_mode else _int(self.config.get("comment_count", 3), 3, 0, 10)
@@ -374,21 +405,9 @@ class LinkPreviewPlugin(Star):
             )
         if card.get("sensitive") and not _bool(self.config.get("blur_sensitive", True), True):
             card["blur"] = False
-        html = render.build_html(card, self.config.get("theme", "dark"))
         name = hashlib.md5(f"{url}|{comments_mode}|{time.time()}".encode()).hexdigest()[:16] + ".jpg"
         out = self.cache_dir / name
-        render_timeout = _int(self.config.get("render_timeout", 25), 25, 5, 120)
-        try:
-            await asyncio.wait_for(self.renderer.render(html, out, render_timeout), render_timeout + 5)
-            return str(out)
-        except Exception as e:
-            # 本机浏览器不可用时退回 AstrBot 自带的文转图服务
-            logger.warning(f"[LinkPreview] 本机渲染失败，改用文转图服务：{e}")
-            return await self.html_render(
-                render.TEMPLATE.read_text(encoding="utf-8"),
-                {"c": card, "theme": "light" if self.config.get("theme") == "light" else "dark"},
-                options={"type": "jpeg", "quality": 90, "full_page": True},
-            )
+        return await self._render_html(render.TEMPLATE, card, out)
 
     async def _preview(self, event, links, comments_mode=False, quiet=True):
         self._clean_cache()
@@ -540,14 +559,11 @@ class LinkPreviewPlugin(Star):
         hidden = max(0, len(pages) - max_pages)
         pages = pages[:max_pages]
         theme = self.config.get("theme", "dark")
-        render_timeout = _int(self.config.get("render_timeout", 25), 25, 5, 120)
         stem = hashlib.md5(f"{url}|{time.time()}".encode()).hexdigest()[:12]
         paths = []
         for no, blocks in enumerate(pages, 1):
-            html = render.build_article_html(article, blocks, no, len(pages), hidden, theme)
             out = self.cache_dir / f"{stem}-{no:02d}.jpg"
-            await asyncio.wait_for(self.renderer.render(html, out, render_timeout), render_timeout + 5)
-            paths.append(str(out))
+            paths.append(await self._render_page(article, blocks, no, len(pages), hidden, theme, out))
         return paths, article, len(pages), hidden
 
     @filter.command("全文", alias={"fulltext", "维基全文"})

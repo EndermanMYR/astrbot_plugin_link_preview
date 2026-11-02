@@ -80,8 +80,15 @@ class TestPackaging(unittest.TestCase):
 
     def test_requirements_cover_imports(self):
         req = read("requirements.txt").lower()
-        for pkg in ("httpx", "jinja2", "playwright", "beautifulsoup4"):
+        for pkg in ("httpx", "jinja2", "beautifulsoup4", "pillow"):
             self.assertIn(pkg, req, f"requirements.txt 缺少 {pkg}")
+
+    def test_no_playwright_dependency(self):
+        """渲染已统一走 AstrBot 的文转图，插件不再需要浏览器。"""
+        req = read("requirements.txt").lower()
+        self.assertNotIn("playwright", req)
+        for name in ("render.py", "main.py"):
+            self.assertNotIn("playwright", read(name).lower(), f"{name} 里还有 playwright 引用")
 
     def test_license_is_mit(self):
         self.assertIn("MIT License", read("LICENSE"))

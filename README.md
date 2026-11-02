@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![AstrBot](https://img.shields.io/badge/AstrBot-v4.16%2B-brightgreen)
 ![Platform](https://img.shields.io/badge/平台-QQ%20%7C%20OneBot-12B7F5)
-![Render](https://img.shields.io/badge/渲染-Playwright%20Chromium-2EAD33)
+![Render](https://img.shields.io/badge/渲染-AstrBot%20文转图-2EAD33)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
 ## ✅ 简介 | Introduction
@@ -21,7 +21,7 @@
   </tr>
 </table>
 
-这是一个为 **AstrBot** 编写的插件：群聊里有人发国外平台的链接时，自动抓取标题、作者、正文、配图、数据和热门评论，用 Playwright 在本地渲染成一张卡片图片发回群里。
+这是一个为 **AstrBot** 编写的插件：群聊里有人发国外平台的链接时，自动抓取标题、作者、正文、配图、数据和热门评论，渲染成一张卡片图片发回群里。
 
 [![Stars](https://img.shields.io/github/stars/EndermanMYR/astrbot_plugin_link_preview?color=yellow&label=%E6%A0%87%E6%98%9F)](https://github.com/EndermanMYR/astrbot_plugin_link_preview/stargazers)
 [![Issues](https://img.shields.io/github/issues/EndermanMYR/astrbot_plugin_link_preview?color=darkgreen&label=%E5%8F%8D%E9%A6%88)](https://github.com/EndermanMYR/astrbot_plugin_link_preview/issues)
@@ -29,7 +29,7 @@
 [![Last Commit](https://img.shields.io/github/last-commit/EndermanMYR/astrbot_plugin_link_preview?color=blueviolet&label=%E6%9C%80%E8%BF%91%E6%9B%B4%E6%96%B0)](https://github.com/EndermanMYR/astrbot_plugin_link_preview/commits/main)
 
 > [!IMPORTANT]
-> 卡片由容器内的 **Playwright Chromium** 在本机渲染，不走第三方截图接口。浏览器不可用时会自动退回 AstrBot 自带的文转图服务，此时排版会有差异。
+> 卡片渲染走 **AstrBot 自带的文转图服务**（`html_render`），插件不再依赖 Playwright、不用装 Chromium、也不用 Docker。代价是渲染依赖该服务，详见下方「渲染」一节。
 
 > [!WARNING]
 > 插件内置的屏蔽词**不可能覆盖所有敏感内容**，转发抓取内容存在账号被限制或封禁的风险。**使用前请阅读 [免责声明](#️-免责声明--disclaimer)，风险与合规责任由部署者自行承担。**
@@ -97,80 +97,33 @@ AstrBot/data/plugins/astrbot_plugin_link_preview
 
 重启 AstrBot 后即可在 WebUI 中看到插件。
 
-### 🖥️ 浏览器：装不装都行
+### 🖼️ 渲染：走 AstrBot 的文转图
 
-卡片用无头浏览器截图。插件按这个顺序找浏览器，**第一个能用的就用**：
+卡片不再由插件自己开浏览器截图，而是把 HTML 交给 AstrBot 的 `html_render`。所以：
 
-1. `browser_path` 指定的可执行文件
-2. `browser_channel` 指定的通道（`chrome` / `msedge` / `chromium`）
-3. `auto` 模式下自动探测系统已装的 Chrome / Edge / Chromium
-4. Playwright 自带的 Chromium
+- 插件**不依赖 Playwright**，`requirements.txt` 里没有它
+- 不用装 Chromium、不用 `playwright install-deps`、不用 Docker
+- 代价：渲染质量与可用性取决于文转图服务
 
-**机器上本来就有 Chrome 或 Edge 的，什么都不用做。**
+> [!IMPORTANT]
+> `t2i_strategy` 必须是 `remote`（默认值）。配成 `local` 时 AstrBot 会直接抛 `NotImplementedError`——本地策略只能画 Markdown，画不了 HTML，卡片会发不出去。
 
-#### 方式一：让它自己下（默认）
+**服务不稳时**：官方端点 `t2i.soulter.top` 偶尔返回 503。插件对每次渲染重试 3 次（间隔 1.2 / 2.4 秒），仍失败就记一条 warning，这条链接不出卡片，其他链接不受影响。AstrBot 支持配置多个 t2i 端点，想自己托管改那里即可。
 
-一个浏览器都找不到时，插件会自动跑一次 `playwright install chromium`（约 150MB，只下一次），装在 `~/.cache/ms-playwright`。Linux 且是 root 时还会补装系统依赖。
+#### 出图质量
 
-由 `browser_auto_install` 控制，默认开。不想让它联网下载就关掉。
+远端服务的视口固定 **800×720、DPR 1**，且忽略 `device_scale_factor`，所以做了三件事让效果接近本机渲染：
 
-> [!TIP]
-> **刚装完别急着看效果。** 浏览器是后台下载的，装完之前的卡片会退回文转图——四周有空白、分辨率减半、数字字距偏宽，看着像插件坏了，其实是在等浏览器就绪。
->
-> 一般等 **1～3 分钟**（看网速和要不要补系统依赖），看到日志里出现这行就说明到位了：
->
-> ```
-> [LinkPreview] 浏览器已启动：{'executable_path': '...'}
-> ```
->
-> 之后再发链接，才是卡片的最佳效果。
-
-#### 方式二：手动装
-
-想提前装好，或者自动下载失败时补一下：
-
-```bash
-pip install -r requirements.txt        # httpx / jinja2 / playwright
-
-# 只下 Chromium（约 150MB）
-python -m playwright install chromium
-
-# Linux 缺系统库时再加这一步（需要 root）
-python -m playwright install-deps chromium
-```
-
-各平台装系统浏览器（装了就不用下 Chromium）：
-
-| 平台 | 命令 |
+| 问题 | 处理 |
 |---|---|
-| Windows | Windows 10/11 自带 Edge，或装 Chrome，无需命令行 |
-| macOS | `brew install --cask google-chrome` / `brew install --cask microsoft-edge` |
-| Debian / Ubuntu | `sudo apt install -y chromium` 或 `chromium-browser` |
-| CentOS / RHEL | `sudo dnf install -y chromium` |
-| Alpine | `apk add chromium` |
-| Docker 里的 AstrBot | 进容器执行 `python -m playwright install chromium` |
+| 右侧一大片空白 | 模板加了 `body.t2i` 版式，卡片铺满 800 宽（原来 640） |
+| 矮卡片下方留白 | 视口高度不会小于 720，出图后用 Pillow 按背景色裁掉多余边距 |
+| 数字英文被撑成「2 0 2 6」 | 字体栈把 `DejaVu Sans` / `sans-serif` 排在 CJK 字体之前。远端机器没装 Noto CJK 时会退到 HanaMin 这类字体，它们的拉丁字形是全角的 |
 
-#### 方式三：指定已有浏览器
-
-```json
-"browser_channel": "msedge",
-"browser_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
-```
-
-`browser_path` 优先级最高，填了就用它，不看其他。
-
-#### 怎么确认在用哪个
-
-启动后日志里会有一行：
-
-```
-[LinkPreview] 浏览器已启动：{'executable_path': '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}
-```
+超长卡片不会被截断——高度会随内容延伸。
 
 > [!NOTE]
-> 全都找不到时会退回 AstrBot 自带的文转图服务，效果见下。注意 `t2i_strategy` 如果配成 `local`，AstrBot 会直接抛 `NotImplementedError`（本地策略只支持 Markdown，画不了 HTML）；要降级能出图，请把 t2i 配成 `remote`。
-
-**文转图的效果**：排版一致，但整页截图会留出四周空白、分辨率只有一半、数字可能变成全角宽字距。容器里缺 emoji 字体的话，再补 `apt install -y fonts-noto-color-emoji`。
+> 唯一的差距是分辨率：现在是 800 宽（裁完约 780），原来本机渲染是 1200 宽（600 CSS px × DPR 2）。文字像素高度相同，整图略小一点。
 
 ## ⚙️ 配置 | Configuration
 
@@ -200,9 +153,6 @@ AstrBot WebUI -> 插件 -> 插件配置
 | `show_images` | 显示配图和封面 |
 | `blur_sensitive` | 平台标记为敏感的图片自动模糊 |
 | `comment_count` | 卡片里显示几条热门评论，默认 `3`，最大 `10` |
-| `browser_channel` | 浏览器来源：`auto` / `chrome` / `msedge` / `chromium` / `playwright` |
-| `browser_path` | 浏览器可执行文件路径，填了优先用这个 |
-| `browser_auto_install` | 一个浏览器都没有时自动下载 Chromium，默认开 |
 
 ### 🌐 网络与抓取
 
@@ -365,31 +315,32 @@ docker exec -it astrbot bash
 cd /AstrBot/data/plugins
 ```
 
-抓取一张卡片并渲染成图片：
+抓取一张卡片，把 HTML 存下来看看排版：
 
 ```python
 import asyncio, fetchers, render
-from playwright.async_api import async_playwright
 
 async def main():
     async with fetchers.make_client(None, 15) as c:
         card = await fetchers.fetch(c, "github",
             "https://github.com/EndermanMYR/astrbot_plugin_link_preview", comments=3)
         card = await render.prepare(c, card)
-    html = render.build_html(card, "dark")
-    async with async_playwright() as p:
-        b = await p.chromium.launch()
-        pg = await b.new_page(viewport={"width": 680, "height": 900}, device_scale_factor=2)
-        await pg.set_content(html, wait_until="load")
-        await pg.evaluate("document.fonts.ready")
-        el = await pg.query_selector("#card")
-        await el.screenshot(path="card.jpg", type="jpeg", quality=92)
-        await b.close()
+    open("card.html", "w", encoding="utf-8").write(render.build_html(card, "dark"))
 
 asyncio.run(main())
 ```
 
-上面 `docs/images/` 里的展示图就是这么生成的。只想改模板不想抓网络数据的话，可以直接构造一个卡片字典丢给 `render.build_html`，那样连浏览器都不用起。
+`build_html(card, theme, t2i=True)` 出来的就是交给文转图的完整 HTML，用浏览器打开就能看到最终版式（`t2i=False` 是原来的 640 宽版式）。`render.crop_image(path)` 用来裁掉远端服务留下的空白边距，可以单独拿一张图试。
+
+### 单元测试
+
+测试用标准库 `unittest`，不联网、不需要 AstrBot（`tests/_stub.py` 会在进程内伪造 `astrbot.api.logger`）：
+
+```bash
+python -m unittest discover -s tests -t . -v
+```
+
+覆盖的是容易悄悄坏掉的部分：链接识别（19 个平台）、数字/时长/时间格式化、OpenGraph 解析、全文分页、词表匹配（含插字写法）、配置项与抓取器是否对齐、发布包是否缺文件、模板字体栈顺序、裁边逻辑。CI 在 `.github/workflows/ci.yml`，推 main 就跑。
 
 ### 单元测试
 
@@ -403,7 +354,7 @@ python -m unittest discover -s tests -t . -v
 
 ## ❤️ 致谢 | Credits
 
-- 卡片渲染基于 [Playwright](https://playwright.dev/)
+- 卡片渲染基于 AstrBot 自带的文转图（`html_render`）
 - 抓取基于 [httpx](https://www.python-httpx.org/)，模板基于 [Jinja2](https://jinja.palletsprojects.com/)
 
 ## ⚠️ 免责声明 | Disclaimer
