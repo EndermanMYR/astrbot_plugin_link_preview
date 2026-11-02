@@ -345,7 +345,7 @@ class LinkPreviewPlugin(Star):
         async with fetchers.make_client(self.config.get("proxy") or None, timeout) as client:
             x_task = None
             if platform == "x" and n_comments:
-                wait = 75 if comments_mode else _int(self.config.get("x_comments_wait", 15), 15, 0, 60)
+                wait = 75 if comments_mode else _int(self.config.get("x_comments_wait", 25), 25, 0, 60)
                 x_task = asyncio.ensure_future(self._x_replies_for(url, n_comments, wait))
             card = await fetchers.fetch(client, platform, url,
                                         github_token=self.config.get("github_token") or None,
@@ -394,7 +394,7 @@ class LinkPreviewPlugin(Star):
                     yield event.plain_result(e.notice or BLOCK_NOTICE)
                 continue
             except Exception as e:
-                logger.info(f"[LinkPreview] {platform} {url} 预览失败：{e}")
+                logger.warning(f"[LinkPreview] {platform} {url} 预览失败：{e}")
                 if not quiet:
                     yield event.plain_result(f"预览失败：{e}")
                 continue

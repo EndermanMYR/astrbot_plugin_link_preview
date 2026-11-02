@@ -352,11 +352,11 @@ mixin:
 
 ## 🧪 开发验证 | Development
 
-插件不依赖 AstrBot 就能单独跑抓取和渲染，方便调模板：
+`fetchers.py` 和 `render.py` 的日志走 `from astrbot.api import logger`，所以要在**装了 AstrBot 的环境**里跑——最省事的是进 AstrBot 容器：
 
 ```bash
-pip install httpx jinja2 playwright
-python -m playwright install chromium
+docker exec -it astrbot bash
+cd /AstrBot/data/plugins
 ```
 
 抓取一张卡片并渲染成图片：
@@ -383,7 +383,7 @@ async def main():
 asyncio.run(main())
 ```
 
-`fetchers.py` 和 `render.py` 都不 import `astrbot`，可以直接在本地改模板看效果。上面 `docs/images/` 里的展示图就是这么生成的。
+上面 `docs/images/` 里的展示图就是这么生成的。只想改模板不想抓网络数据的话，可以直接构造一个卡片字典丢给 `render.build_html`，那样连浏览器都不用起。
 
 ## ❤️ 致谢 | Credits
 
