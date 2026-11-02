@@ -1304,6 +1304,129 @@ async def fetch_oembed(client, platform, url):
 COMMENT_PLATFORMS = {"youtube", "github", "bluesky", "pixiv", "tiktok", "x", "steam"}
 
 
+TWITCH_CLIENT_ID = "kimne78kx3ncx6brgo4mv6wki5h1ko"   # 网页版公开 Client-ID，无需登录
+TWITCH_RESERVED = {
+    "directory", "videos", "settings", "search", "p", "downloads", "subscriptions",
+    "wallet", "drops", "inventory", "jobs", "turbo", "creatorcamp", "store", "friends",
+}
+TWITCH_USER_Q = """
+query($login:String!){
+  user(login:$login){
+    displayName description profileImageURL(width:600) bannerImageURL
+    stream{ id title viewersCount createdAt
+      game{ displayName }
+      previewImageURL(width:1280,height:720)
+    }
+  }
+}"""
+TWITCH_CLIP_Q = """
+query($slug:String!){
+  clip(slug:$slug){
+    title durationSeconds viewCount createdAt thumbnailURL(width:1280,height:720)
+    broadcaster{ displayName login }
+    curator{ displayName }
+    game{ displayName }
+  }
+}"""
+
+
+async def _twitch_gql(client, query, variables):
+    r = await client.post("https://gql.twitch.tv/gql",
+                          headers={"Client-ID": TWITCH_CLIENT_ID},
+                          json={"query": query, "variables": variables})
+    if r.status_code != 200:
+        raise FetchError(f"Twitch HTTP {r.status_code}")
+    return r.json().get("data") or {}
+
+
+def twitch_target(url):
+    """解析 Twitch 链接，返回 ("clip", slug) / ("channel", login) / ("og", None)。"""
+    u = urlsplit(url)
+    parts = [x for x in u.path.split("/") if x]
+    if (u.hostname or "").endswith("clips.twitch.tv") and parts:
+        return "clip", parts[0]
+    if len(parts) >= 3 and parts[1] == "clip":
+        return "clip", parts[2]
+    if parts[:1] == ["videos"]:
+        return "og", None
+    login = next((x for x in parts if x.lower() not in TWITCH_RESERVED), "")
+    return ("channel", login) if login else ("og", None)
+
+
+async def fetch_twitch(client, url):
+    """Twitch 频道和切片。
+
+    网页对爬虫会返回登录墙（卡片只剩「登录 Twitch」），所以走网页版公开 GQL：
+    频道资料、是否在播、观众数、分类、16:9 预览图都能拿到。
+    """
+    kind, value = twitch_target(url)
+    clip_slug = value if kind == "clip" else None
+
+    if clip_slug:
+        data = await _twitch_gql(client, TWITCH_CLIP_Q, {"slug": clip_slug})
+        clip = data.get("clip")
+        if not clip:
+            raise FetchError("这个切片不存在或已删除")
+        b = clip.get("broadcaster") or {}
+        cur = clip.get("curator") or {}
+        return {
+            "platform": "twitch", "platform_name": "Twitch", "color": PLATFORMS["twitch"][1],
+            "url": url, "title": clip.get("title") or "Twitch 切片",
+            "text": None,
+            "author": {"name": b.get("displayName") or b.get("login"),
+                       "handle": ("@" + b["login"]) if b.get("login") else None,
+                       "avatar": None, "bio": None},
+            "images": [clip["thumbnailURL"]] if clip.get("thumbnailURL") else [],
+            "stats": [s for s in (["播放", compact(clip.get("viewCount"))],
+                                  ["时长", duration(clip.get("durationSeconds"))],
+                                  ["分类", (clip.get("game") or {}).get("displayName")],
+                                  ["剪辑", cur.get("displayName")]) if s[1]],
+            "tags": [], "time": fmt_time(clip.get("createdAt")),
+            "comments": [], "quote": None, "video": True, "duration": duration(clip.get("durationSeconds")),
+            "sensitive": False, "note": "切片", "comments_mode": False, "blur": False,
+            "domain": "clips.twitch.tv", "short_url": "clips.twitch.tv/" + clip_slug,
+            "no_comments_reason": None,
+        }
+
+    if kind == "og":
+        return await fetch_og(client, "twitch", url)
+    login = value
+    data = await _twitch_gql(client, TWITCH_USER_Q, {"login": login})
+    user = data.get("user")
+    if not user:
+        raise FetchError("这个 Twitch 频道不存在")
+
+    stream = user.get("stream")
+    name = user.get("displayName") or login
+    game = (stream or {}).get("game") or {}
+    if stream:
+        preview = stream.get("previewImageURL") or \
+            f"https://static-cdn.jtvnw.net/previews-ttv/live_user_{login}-1280x720.jpg"
+        title, note = stream.get("title") or f"{name} 正在直播", None
+        stats = [s for s in (["观看", compact(stream.get("viewersCount"))],
+                             ["分类", game.get("displayName")]) if s[1]]
+        time_text = fmt_time(stream.get("createdAt"))
+        tags = [t for t in (game.get("displayName"), "直播中") if t]
+    else:
+        preview = None
+        title, note = f"{name} 的频道", "当前未开播"
+        stats, time_text, tags = [], None, []
+
+    return {
+        "platform": "twitch", "platform_name": "Twitch", "color": PLATFORMS["twitch"][1],
+        "url": url, "title": title, "text": user.get("description"),
+        "author": {"name": name, "handle": "@" + login,
+                   "avatar": user.get("profileImageURL"), "bio": None},
+        "images": [preview] if preview else [],
+        "stats": stats, "tags": tags, "time": time_text,
+        "comments": [], "quote": None, "video": bool(stream),
+        "duration": None, "sensitive": False, "note": note,
+        "comments_mode": False, "blur": False,
+        "domain": "twitch.tv", "short_url": "twitch.tv/" + login,
+        "no_comments_reason": None,
+    }
+
+
 async def fetch(client, platform, url, github_token=None, comments=0, steam_api_key=None, x_service=None):
     if platform == "x":
         return await fetch_x(client, url, x_service)
@@ -1331,6 +1454,8 @@ async def fetch(client, platform, url, github_token=None, comments=0, steam_api_
         return await fetch_dailymotion(client, url)
     if platform == "niconico":
         return await fetch_niconico(client, url)
+    if platform == "twitch":
+        return await fetch_twitch(client, url)
     if platform in OEMBED:
         return await fetch_oembed(client, platform, url)
     return await fetch_og(client, platform, url)

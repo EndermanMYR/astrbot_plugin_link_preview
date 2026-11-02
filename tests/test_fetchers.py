@@ -121,6 +121,29 @@ def fetchers_icons():
     return render.ICONS
 
 
+class TestTwitchTarget(unittest.TestCase):
+    """Twitch 链接解析：频道、切片、目录页要分得清。"""
+
+    def test_channel(self):
+        for url in ("https://www.twitch.tv/shroud", "https://twitch.tv/xqc?sr=a",
+                    "https://twitch.tv/xqc/videos"):
+            self.assertEqual(fetchers.twitch_target(url), ("channel", url.split("/")[3].split("?")[0]))
+
+    def test_clip(self):
+        self.assertEqual(fetchers.twitch_target("https://clips.twitch.tv/AbcDef"),
+                         ("clip", "AbcDef"))
+        self.assertEqual(fetchers.twitch_target("https://www.twitch.tv/xqc/clip/AbcDef"),
+                         ("clip", "AbcDef"))
+
+    def test_reserved_pages_fall_back_to_og(self):
+        for url in ("https://www.twitch.tv/directory", "https://www.twitch.tv/videos/123",
+                    "https://www.twitch.tv/"):
+            self.assertEqual(fetchers.twitch_target(url), ("og", None), url)
+
+    def test_bare_host(self):
+        self.assertEqual(fetchers.twitch_target("https://twitch.tv"), ("og", None))
+
+
 class TestLinkDedupe(unittest.TestCase):
     """同一条帖子带参数、换镜像域名，都只能算一条。"""
 

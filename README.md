@@ -86,7 +86,8 @@
 | Dailymotion | 标题、作者、封面、时长、播放/点赞、标签 | — |
 | niconico | 标题、作者、封面、时长、播放/评论/收藏、标签 | — |
 | Spotify / Vimeo / SoundCloud | 标题、作者、封面 | — |
-| Threads / Twitch / Facebook | 页面元信息（要登录的页面不发） | — |
+| Twitch | 频道资料、是否在播、直播标题、观众数、分类、16:9 预览图；切片也行（走公开 GQL，不受登录墙影响） | — |
+| Threads / Facebook | 页面元信息（要登录的页面不发） | — |
 
 不在列表里的网址，用 `/预览 链接` 会按普通网页抓 OpenGraph 信息。
 
