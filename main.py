@@ -22,13 +22,19 @@ HELP = """外链预览
 群里发 YouTube / TikTok / Instagram / X / GitHub / Reddit / Bluesky / pixiv / Steam / 维基百科 / 维基文库 / Dailymotion / niconico / Spotify 等链接，会自动回一张预览卡片（带几条热门评论）。
 /预览 链接：手动预览任意网页链接（也可用 /preview）
 /评论 [链接]：单独看一条链接的评论，最多 10 条；不带链接时用本群最近预览过的那条（也可用 /comments）
-/翻译 [链接]：只回这段内容的译文文本，不出卡片、不发原文（外语帖子默认已在卡片里带译文）
+/翻译 [链接]：出一张带译文的卡片（外语帖子自动预览时已带译文，不用再发这条）
 /全文 [维基链接]：把维基百科词条或维基文库作品的全文分页，合并转发发出（也可用 /维基全文）
 /预览图片 [开/关/默认]：管理员切换本群卡片是否显示配图和封面，不带参数查看当前状态
 /预览帮助：查看这条帮助
 能拿到评论的平台：YouTube、TikTok、X（需配置浏览器服务，较慢）、GitHub Issue/PR、Bluesky、pixiv。Instagram、Reddit 拿不到评论。"""
 
 PLUGIN_NAME = "astrbot_plugin_link_preview"
+# 本插件注册的指令和别名，用来把「指令消息」和「普通聊天」区分开
+COMMAND_NAMES = {
+    "预览", "preview", "评论", "comments", "看评论",
+    "全文", "fulltext", "维基全文", "预览图片", "previewimg", "预览配图",
+    "预览帮助", "previewhelp", "翻译", "translate", "翻译帖子",
+}
 # 词表默认放在插件数据目录（data/plugin_data/<插件名>/）下，随插件数据一起迁移和审计。
 WORDS_NAME = "political.txt"
 R18_NAME = "r18.txt"
@@ -316,19 +322,19 @@ class LinkPreviewPlugin(Star):
                 parts.append(data.replace("\\/", "/"))
         return "\n".join(parts)
 
-    async def _translate_only(self, event, platform, url):
-        """只抓取并翻译，不出卡片（/翻译 指令用）。"""
-        timeout = _int(self.config.get("fetch_timeout", 12), 12, 3, 60)
-        async with fetchers.make_client(self.config.get("proxy") or None, timeout) as client:
-            card = await fetchers.fetch(
-                client, platform, url,
-                github_token=self.config.get("github_token") or None,
-                comments=0,
-                steam_api_key=self.config.get("steam_api_key") or None,
-                x_service=self._x_service() if platform == "x" else None,
-            )
-        card = self._filter_card(card)
-        return await self._translate_card(card, event.unified_msg_origin)
+    @staticmethod
+    def _is_command(text):
+        """判断这条消息是不是本插件的指令。
+
+        AstrBot 交给插件前可能已经把命令前缀剥掉了，只判断开头的 "/" 不够，
+        否则 /翻译 <链接> 会同时触发自动预览，出一张卡又发一条译文。
+        """
+        t = str(text or "").strip()
+        if not t:
+            return False
+        if t[0] in "/!！":
+            return True
+        return t.split()[0] in COMMAND_NAMES
 
     def _duplicate(self, session, url):
         window = _int(self.config.get("dedupe_seconds", 30), 30, 0, 86400)
@@ -492,7 +498,7 @@ class LinkPreviewPlugin(Star):
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_message(self, event: AstrMessageEvent):
         text = (event.message_str or "").strip()
-        if text[:1] in ("/", "!", "！") or not self._allowed(event):
+        if self._is_command(text) or not self._allowed(event):
             return
         if "http" not in text.lower() and not any(isinstance(s, Comp.Json) for s in event.get_messages() or []):
             return
@@ -639,20 +645,8 @@ class LinkPreviewPlugin(Star):
             yield event.plain_result("用法：/翻译 链接（也可以先发一次链接，再发 /翻译）")
             return
 
-        platform, url = links[0]
-        try:
-            translated = await self._translate_only(event, platform, url)
-        except Blocked as e:
-            yield event.plain_result(e.notice or BLOCK_NOTICE)
-            return
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"[LinkPreview] 翻译失败：{e}")
-            yield event.plain_result(f"翻译失败：{e}")
-            return
-        if not translated:
-            yield event.plain_result("这条没有可翻译的正文")
-            return
-        yield event.plain_result(translated)
+        async for res in self._preview(event, links[:1], quiet=False, translate=True):
+            yield res
 
     @filter.command("全文", alias={"fulltext", "维基全文"})
     async def fulltext_cmd(self, event: AstrMessageEvent):
