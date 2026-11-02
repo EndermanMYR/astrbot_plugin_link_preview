@@ -42,6 +42,51 @@ X_SCRAPER_IDLE=1800
 - `X_SCRAPER_IDLE` 空闲多少秒关掉浏览器，默认 1800。调小省内存，调大减少冷启动（冷启动多花 8~10 秒）。
 - `XBROWSER_IMAGE` 想换镜像源时改这个；`PIP_INDEX` 只在本地构建时生效。
 
+## 不用 Docker：裸机 / systemd
+
+它就是个 aiohttp 服务，容器只是省事。裸机跑只要三样东西：Python 3.10+、`aiohttp` + `playwright`、一个 Chromium。
+
+```bash
+# 1. 依赖
+sudo apt install -y python3-venv chromium fonts-noto-cjk
+python3 -m venv /opt/xbrowser/venv
+/opt/xbrowser/venv/bin/pip install aiohttp playwright
+
+# 没有系统 chromium 的机器（macOS / Windows / 精简发行版）：
+/opt/xbrowser/venv/bin/python -m playwright install chromium
+# 脚本会自动回退到 Playwright 自带的那份；也可用 X_CHROMIUM=/path/to/chrome 指定
+
+# 2. 放代码和配置
+sudo mkdir -p /opt/xbrowser/cookies
+sudo cp scraper.py /opt/xbrowser/
+sudo cp .env.example /opt/xbrowser/.env      # 填 Token 和 Cookie 目录
+
+# 3. 交给 systemd
+sudo useradd -r -s /usr/sbin/nologin xbrowser
+sudo chown -R xbrowser:xbrowser /opt/xbrowser
+sudo cp deploy/xbrowser.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now xbrowser
+```
+
+然后插件里填 `x_browser_url = http://127.0.0.1:6081`（不是容器名 `xbrowser`），Token 用 `.env` 里那个。
+
+裸机和容器只差两点：
+
+| 项 | 容器 | 裸机 |
+|---|---|---|
+| 监听地址 | `0.0.0.0:6081`（容器间互访） | 建议 `127.0.0.1:6081`，`X_SCRAPER_HOST` 控制 |
+| 浏览器 | 镜像里装的 `/usr/bin/chromium` | 系统 chromium，或 `playwright install chromium` 后自动回退 |
+
+可用环境变量：
+
+| 变量 | 说明 |
+|---|---|
+| `X_LOGIN_SERVICE_TOKEN` | 必填，插件里的 `x_browser_token` |
+| `X_COOKIE_FILE` | Cookie 文件路径，默认 `/cookies/x_cookies.json` |
+| `X_SCRAPER_PORT` / `X_SCRAPER_HOST` | 监听端口 / 地址，默认 `6081` / `0.0.0.0` |
+| `X_SCRAPER_IDLE` | 空闲多少秒关掉浏览器，默认 1800 |
+| `X_CHROMIUM` | 浏览器可执行文件路径，不存在时回退到 Playwright 自带的 |
+
 ## 接口
 
 所有接口都要 `Authorization: Bearer <Token>`，只有 `/health` 不需要。

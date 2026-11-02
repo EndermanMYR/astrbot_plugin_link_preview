@@ -1,0 +1,25 @@
+[Unit]
+Description=AstrBot 外链预览 · X 抓取后端
+Documentation=https://github.com/EndermanMYR/astrbot_plugin_link_preview/tree/main/x-browser-service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=xbrowser
+Group=xbrowser
+WorkingDirectory=/opt/xbrowser
+EnvironmentFile=/opt/xbrowser/.env
+# 裸机部署只监听本机，AstrBot 用 http://127.0.0.1:6081 访问
+Environment=X_SCRAPER_HOST=127.0.0.1
+Environment=X_SCRAPER_PORT=6081
+Environment=X_COOKIE_FILE=/opt/xbrowser/cookies/x_cookies.json
+Environment=XDG_CACHE_HOME=/opt/xbrowser/.cache
+ExecStart=/opt/xbrowser/venv/bin/python /opt/xbrowser/scraper.py
+Restart=always
+RestartSec=3
+# 内存保护：Chromium 崩了由 Restart 兜住
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

@@ -187,6 +187,9 @@ docker compose up -d      # 本地构建，约 10 分钟（主要花在装 chrom
 
 再把地址和 Token 填进 `x_browser_url` / `x_browser_token`。不部署也不影响其他平台，只是 X 卡片没有评论。
 
+> [!TIP]
+> 不想用 Docker 也能跑：它就是普通的 aiohttp + Playwright 服务，可以用 systemd 裸机部署，详见 [x-browser-service/README.md](x-browser-service/README.md#不用-docker裸机--systemd)。
+
 #### 🔑 Cookie 怎么来：从哪里拿
 
 **前提：在电脑上操作**（手机浏览器看不到开发者工具），并且这个浏览器**已经登录了 x.com**。无痕/隐私窗口不行，关掉就没了。

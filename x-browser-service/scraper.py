@@ -21,6 +21,8 @@ COOKIE_FILE = os.environ.get("X_COOKIE_FILE", "/cookies/x_cookies.json")
 IG_COOKIE_FILE = os.environ.get("X_IG_COOKIE_FILE", "/cookies/ig_cookies.json")
 TOKEN = os.environ.get("X_LOGIN_SERVICE_TOKEN", "")
 PORT = int(os.environ.get("X_SCRAPER_PORT", "6081"))
+# 容器里要监听 0.0.0.0 才能被别的容器访问；裸机部署建议设成 127.0.0.1
+HOST = os.environ.get("X_SCRAPER_HOST", "0.0.0.0")
 IDLE_SECONDS = int(os.environ.get("X_SCRAPER_IDLE", "600"))
 # 空闲回收的巡检间隔（秒）。
 REAP_INTERVAL = 60
@@ -443,11 +445,16 @@ class Browser:
             return self._ctx
         if self._pw is None:
             self._pw = await async_playwright().start()
-        self._browser = await self._pw.chromium.launch(
-            executable_path=os.environ.get("X_CHROMIUM", "/usr/bin/chromium"),
-            headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
-        )
+        # 优先用 X_CHROMIUM 指定的浏览器；没设或路径不存在时用 Playwright 自带的那份，
+        # 这样裸机 / macOS / Windows 上跑 `playwright install chromium` 就能直接启动
+        exe = os.environ.get("X_CHROMIUM", "/usr/bin/chromium")
+        launch_kw = {
+            "headless": True,
+            "args": ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+        }
+        if exe and os.path.exists(exe):
+            launch_kw["executable_path"] = exe
+        self._browser = await self._pw.chromium.launch(**launch_kw)
         self._ctx = await self._browser.new_context(
             locale="zh-CN",
             viewport={"width": 1280, "height": 1000},
@@ -994,4 +1001,4 @@ def make_app():
 
 
 if __name__ == "__main__":
-    web.run_app(make_app(), host="0.0.0.0", port=PORT, access_log=None)
+    web.run_app(make_app(), host=HOST, port=PORT, access_log=None)
