@@ -18,6 +18,7 @@ ICONS = {
     "steam": "S", "wikipedia": "W", "wikisource": "文", "tiktok": "♪", "spotify": "♫", "vimeo": "V",
     "soundcloud": "S", "instagram": "I", "threads": "@", "twitch": "T", "facebook": "f", "web": "↗",
     "dailymotion": "d", "niconico": "N",
+    "bilibili": "B", "douyin": "抖", "xiaohongshu": "红", "weibo": "微", "zhihu": "知",
 }
 
 _env = jinja2.Environment(autoescape=True)
@@ -35,11 +36,16 @@ async def _data_uri(client, url, referer=None, max_bytes=6 * 1024 * 1024):
         return None
     try:
         headers = {"Referer": referer} if referer else {}
-        r = await client.get(url, headers=headers)
-        ctype = r.headers.get("content-type", "").split(";")[0].strip()
-        if r.status_code != 200 or not ctype.startswith("image/") or len(r.content) > max_bytes:
-            return None
-        return f"data:{ctype};base64," + base64.b64encode(r.content).decode()
+        async with client.stream("GET", url, headers=headers) as r:
+            ctype = r.headers.get("content-type", "").split(";")[0].strip()
+            if r.status_code != 200 or ctype not in {"image/jpeg", "image/png", "image/webp", "image/gif"}:
+                return None
+            content = bytearray()
+            async for chunk in r.aiter_bytes(chunk_size=65536):
+                content.extend(chunk)
+                if len(content) > max_bytes:
+                    return None
+            return f"data:{ctype};base64," + base64.b64encode(content).decode()
     except Exception:
         return None
 
@@ -164,7 +170,7 @@ def _subset_b64(path, chars):
     把字体打进 HTML 就一致了；再按字符裁剪，体积从 700KB 降到几十 KB。
     没装 fonttools 时退回整份字体，效果一样只是请求大一点。
     """
-    key = (str(path), hash(chars))
+    key = (str(path), chars)
     if key in _FONT_CACHE:
         return _FONT_CACHE[key]
     try:

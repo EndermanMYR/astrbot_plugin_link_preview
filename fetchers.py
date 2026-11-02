@@ -22,6 +22,11 @@ from urllib.parse import parse_qsl, quote, unquote, urlencode, urljoin, urlsplit
 
 import httpx
 
+if __package__:
+    from .safe_http import PreviewClient, PublicTransport
+else:
+    from safe_http import PreviewClient, PublicTransport
+
 from astrbot.api import logger
 
 UA = (
@@ -58,6 +63,11 @@ PLATFORMS = {
     "dailymotion": ("Dailymotion", "#0066dc"),
     "niconico": ("niconico", "#252525"),
     "web": ("网页", "#7c5cff"),
+    "bilibili": ("哔哩哔哩", "#fb7299"),
+    "douyin": ("抖音", "#fe2c55"),
+    "xiaohongshu": ("小红书", "#ff2442"),
+    "weibo": ("微博", "#e6162d"),
+    "zhihu": ("知乎", "#0084ff"),
 }
 
 # 只取元信息（OpenGraph）的站点：域名 -> 平台 key
@@ -99,6 +109,23 @@ LINK_PATTERNS = [
     ("og", re.compile(
         r"https?://(?:www\.|m\.)?(?:threads\.(?:net|com)|twitch\.tv|facebook\.com|fb\.watch)/[^\s<>\"']+", re.I)),
 ]
+
+# Append to preserve the existing fetchers' positional pattern references.
+LINK_PATTERNS += [
+    ("bilibili", re.compile(r"https?://(?:(?:www\.|m\.)?bilibili\.com/video/(?:BV[0-9A-Za-z]{10}|av\d+)(?:[/?#]|$)|b23\.tv/[0-9A-Za-z]+(?:[/?#]|$))", re.I)),
+    ("douyin", re.compile(r"https?://(?:(?:www\.|m\.)?douyin\.com/(?:video|note)/\d+(?:[/?#]|$)|v\.douyin\.com/[0-9A-Za-z_-]+(?:[/?#]|$)|www\.iesdouyin\.com/share/video/\d+(?:[/?#]|$))", re.I)),
+    ("xiaohongshu", re.compile(r"https?://(?:(?:www\.|m\.)?xiaohongshu\.com/(?:explore|discovery/item)/[0-9a-f]+(?:[/?#]|$)|xhslink\.com/[0-9A-Za-z/]+(?:[?#]|$))", re.I)),
+    ("weibo", re.compile(r"https?://(?:(?:www\.)?weibo\.com/\d+/[0-9A-Za-z]+(?:[/?#]|$)|m\.weibo\.cn/(?:detail|status)/[0-9A-Za-z]+(?:[/?#]|$))", re.I)),
+    ("zhihu", re.compile(r"https?://(?:(?:www\.)?zhihu\.com/(?:question/\d+(?:/answer/\d+)?|answer/\d+|zvideo/\d+)(?:[/?#]|$)|zhuanlan\.zhihu\.com/p/\d+(?:[/?#]|$))", re.I)),
+]
+
+DOMESTIC_HOSTS = {
+    "bilibili": {"www.bilibili.com", "m.bilibili.com", "bilibili.com", "b23.tv"},
+    "douyin": {"www.douyin.com", "m.douyin.com", "douyin.com", "v.douyin.com", "www.iesdouyin.com"},
+    "xiaohongshu": {"www.xiaohongshu.com", "m.xiaohongshu.com", "xiaohongshu.com", "xhslink.com"},
+    "weibo": {"weibo.com", "www.weibo.com", "m.weibo.cn"},
+    "zhihu": {"www.zhihu.com", "zhihu.com", "zhuanlan.zhihu.com"},
+}
 
 # GitHub 一级路径里不是用户名的保留词
 GITHUB_RESERVED = {
@@ -366,43 +393,13 @@ async def _x_card(client, url, tid):
     )
 
 
-async def _x_via_service(service_url, service_token, url, tid):
-    """降级一：走浏览器服务 /api/post。只有正文和三项计数，没有配图/头像。"""
-    async with httpx.AsyncClient(trust_env=False, timeout=90) as c:
-        r = await c.post(service_url.rstrip("/") + "/api/post",
-                         headers={"Authorization": "Bearer " + service_token},
-                         json={"value": tid, "ready_timeout_ms": 15000, "settle_ms": 800})
-    data = r.json() if "json" in r.headers.get("content-type", "") else {}
-    if r.status_code != 200:
-        raise FetchError(data.get("error") or f"浏览器服务 HTTP {r.status_code}")
-    items = data.get("items") or []
-    if not items:
-        raise FetchError("浏览器服务没拿到这条帖子")
-    it = items[0]
-    a = it.get("author") or {}
-    m = it.get("metrics") or {}
-    return card(
-        "x", url, text=it.get("text") or "",
-        author={"name": a.get("name"), "handle": "@" + (a.get("username") or ""), "avatar": None},
-        stats=[stat("回复", m.get("reply_count")), stat("转帖", m.get("retweet_count")),
-               stat("喜欢", m.get("like_count"))],
-        time=fmt_time(it.get("created_at")), sensitive=bool(it.get("sensitive")),
-        note="fxtwitter 暂时不可用，这张卡片由浏览器抓取，没有配图",
-    )
-
-
 async def fetch_x(client, url, service=None):
-    """三级降级：fxtwitter → 浏览器服务 → 页面 og 标签。"""
+    """Only public sources: logged-in fallback could disclose protected posts."""
     tid = LINK_PATTERNS[0][1].match(url).group(1)
     try:
         return await _x_card(client, url, tid)
     except (FetchError, httpx.HTTPError, ValueError) as e:
         logger.warning(f"[LinkPreview] fxtwitter 取不到 {tid}（{e}），尝试降级")
-    if service and all(service):
-        try:
-            return await _x_via_service(service[0], service[1], url, tid)
-        except Exception as e:  # noqa: BLE001 - 降级失败就再降一级
-            logger.warning(f"[LinkPreview] 浏览器服务也没拿到 {tid}：{e}")
     return await fetch_og(client, "x", url)
 
 
@@ -423,18 +420,24 @@ async def fetch_x_replies(service_url, token, tid, n=3, timeout=75, budget=25):
     data = r.json() if "json" in r.headers.get("content-type", "") else {}
     if r.status_code != 200:
         raise FetchError(data.get("error") or f"浏览器服务 HTTP {r.status_code}")
-    out = []
-    for x in data.get("items") or []:
-        if x.get("id") == tid or x.get("sensitive") or not x.get("text"):
-            continue
-        a = x.get("author") or {}
-        likes = (x.get("metrics") or {}).get("like_count")
-        out.append({"author": a.get("name") or ("@" + a["username"] if a.get("username") else None),
-                    "text": flatten(x.get("text")), "likes": compact(likes) if likes else None,
-                    "time": fmt_time(x.get("created_at"))})
-        if len(out) >= n:
-            break
-    return out
+    # Logged-in search finds IDs only; publish content from the public source.
+    public = []
+    async with make_client(timeout=8) as client:
+        for item in (data.get("items") or [])[:min(n + 3, 13)]:
+            ident = str(item.get("id") or "")
+            if not re.fullmatch(r"\d{1,19}", ident) or ident == tid:
+                continue
+            try:
+                post = await _x_card(client, f"https://x.com/i/status/{ident}", ident)
+            except (FetchError, httpx.HTTPError, ValueError):
+                continue
+            if post.get("sensitive") or not post.get("text"):
+                continue
+            public.append({"author": (post.get("author") or {}).get("name"),
+                           "text": flatten(post["text"]), "time": post.get("time"), "likes": None})
+            if len(public) >= n:
+                break
+    return public
 
 
 # ---------------------------------------------------------------------------
@@ -599,6 +602,9 @@ async def fetch_github(client, url, token=None, comments=0):
                     author={"name": u.get("login"), "handle": u.get("company") or u.get("location"), "avatar": u.get("avatar_url")},
                     stats=[stat("仓库", u.get("public_repos")), stat("关注者", u.get("followers"))],
                     time=fmt_time(u.get("created_at")), note="用户主页")
+    r = await api(f"/repos/{owner}/{repo}")
+    if r.get("private") is not False or r.get("visibility", "public") != "public":
+        raise FetchError("仅预览公开 GitHub 仓库")
     if kind:
         it = await api(f"/repos/{owner}/{repo}/issues/{num}")
         user = it.get("user") or {}
@@ -620,7 +626,6 @@ async def fetch_github(client, url, token=None, comments=0):
                     tags=[lb.get("name") for lb in it.get("labels") or []][:6],
                     time=fmt_time(it.get("created_at")), comments=cmts,
                     note="Pull Request" if it.get("pull_request") else "Issue")
-    r = await api(f"/repos/{owner}/{repo}")
     o = r.get("owner") or {}
     return card("github", url, title=r.get("full_name"), text=r.get("description"),
                 author={"name": o.get("login"), "avatar": o.get("avatar_url")},
@@ -1428,6 +1433,8 @@ async def fetch_twitch(client, url):
 
 
 async def fetch(client, platform, url, github_token=None, comments=0, steam_api_key=None, x_service=None):
+    if platform in DOMESTIC_HOSTS:
+        return await fetch_domestic(client, platform, url)
     if platform == "x":
         return await fetch_x(client, url, x_service)
     if platform == "youtube":
@@ -1462,7 +1469,56 @@ async def fetch(client, platform, url, github_token=None, comments=0, steam_api_
 
 
 def make_client(proxy=None, timeout=12):
-    return httpx.AsyncClient(
+    return PreviewClient(
         headers={"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8"},
-        follow_redirects=True, timeout=timeout, proxy=proxy or None,
+        follow_redirects=True, max_redirects=5, timeout=timeout,
+        transport=PublicTransport(proxy=proxy or None), trust_env=False,
     )
+
+
+async def fetch_domestic(client, platform, url):
+    """Read public share pages; never execute embedded scripts or bypass login walls."""
+    for _ in range(6):
+        parsed = urlsplit(url)
+        if parsed.scheme not in ("http", "https") or parsed.hostname not in DOMESTIC_HOSTS[platform] or parsed.username or parsed.password:
+            raise FetchError("分享链接跳转到了不支持的域名")
+        if platform == "bilibili":
+            match = re.fullmatch(r"/video/(BV[0-9A-Za-z]{10}|av\d+)/?", parsed.path, re.I)
+            if match and parsed.hostname != "b23.tv":
+                ident = match.group(1)
+                params = {"aid": ident[2:]} if ident.lower().startswith("av") else {"bvid": "BV" + ident[2:]}
+                response = await client.get("https://api.bilibili.com/x/web-interface/view", params=params)
+                response.raise_for_status()
+                payload = response.json()
+                if payload.get("code") != 0 or not isinstance(payload.get("data"), dict):
+                    raise FetchError("B站视频不存在或暂时无法访问")
+                data = payload["data"]
+                owner, stats = data.get("owner") or {}, data.get("stat") or {}
+                return card(platform, url, title=data.get("title"), text=data.get("desc"),
+                            author={"name": owner.get("name"), "avatar": owner.get("face")},
+                            images=[data["pic"]] if data.get("pic") else [], video=True,
+                            duration=duration(data.get("duration")), time=fmt_time(data.get("pubdate")),
+                            stats=[stat(label, stats.get(key)) for label, key in (("播放", "view"), ("点赞", "like"), ("投币", "coin"), ("收藏", "favorite"))],
+                            referer="https://www.bilibili.com/")
+        response = await client.get(url, follow_redirects=False)
+        if response.is_redirect:
+            location = response.headers.get("location")
+            if not location:
+                raise FetchError("分享链接没有跳转目标")
+            url = urljoin(url, location)
+            continue
+        response.raise_for_status()
+        meta = parse_meta(response.text)
+        title = meta.get("og:title") or meta.get("twitter:title") or meta.get("title")
+        desc = meta.get("og:description") or meta.get("description") or meta.get("twitter:description")
+        if not title or any(word in title.lower() for word in ("登录", "安全验证", "验证码", "security verification", "passport", "access denied")):
+            raise FetchError("平台要求登录或验证，暂时无法获取公开预览")
+        if title.strip() in (PLATFORMS[platform][0], "小红书 - 你的生活指南", "知乎 - 有问题，就会有答案", "抖音-记录美好生活"):
+            raise FetchError("平台未返回这条内容的公开预览")
+        image = meta.get("og:image") or meta.get("twitter:image")
+        return card(platform, url, title=title, text=desc,
+                    author={"name": meta["author"]} if meta.get("author") else None,
+                    images=[urljoin(url, image)] if image else [],
+                    video=(meta.get("og:type") or "").startswith("video"),
+                    note="公开分享页预览", referer=url)
+    raise FetchError("分享链接跳转次数过多")
