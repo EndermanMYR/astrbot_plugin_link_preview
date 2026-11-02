@@ -53,6 +53,35 @@ class TestBuildHtml(unittest.TestCase):
         self.assertIn("body.t2i { width: 800px; }", html)
 
 
+class TestMediaLayout(unittest.TestCase):
+    """竖图必须走纵向堆叠，否则 cover 会把上下裁掉。"""
+
+    def test_portrait_needs_stack(self):
+        self.assertTrue(render.media_needs_stack([(648, 1280)]))
+        self.assertTrue(render.media_needs_stack([(800, 600), (648, 1280)]))
+
+    def test_landscape_and_square_use_grid(self):
+        self.assertFalse(render.media_needs_stack([(1280, 720)]))
+        self.assertFalse(render.media_needs_stack([(600, 600), (800, 400)]))
+
+    def test_empty_or_unknown_sizes(self):
+        self.assertFalse(render.media_needs_stack([]))
+        self.assertFalse(render.media_needs_stack([(0, 0)]))
+
+    def test_threshold(self):
+        self.assertFalse(render.media_needs_stack([(100, 120)]))   # 1.2 仍算横/方
+        self.assertTrue(render.media_needs_stack([(100, 130)]))    # 1.3 算竖图
+
+    def test_template_renders_stack_class(self):
+        card = dict(CARD, images=["data:image/jpeg;base64,xx"], media_tall=True)
+        html = render.build_html(card, "dark")
+        self.assertIn("media n1 stack", html)
+
+    def test_template_without_tall(self):
+        card = dict(CARD, images=["data:image/jpeg;base64,xx"], media_tall=False)
+        self.assertNotIn(" stack", render.build_html(card, "dark").split("<body")[1][:2000])
+
+
 class TestT2iOptions(unittest.TestCase):
     def test_returns_full_page_jpeg(self):
         opt = render.t2i_options()

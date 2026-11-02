@@ -43,6 +43,32 @@ async def _data_uri(client, url, referer=None, max_bytes=6 * 1024 * 1024):
         return None
 
 
+async def _image_info(client, url, referer=None, max_bytes=6 * 1024 * 1024):
+    """下载图片，返回 (data URI, 宽, 高)。失败返回 (None, 0, 0)。"""
+    uri = await _data_uri(client, url, referer, max_bytes)
+    if not uri:
+        return None, 0, 0
+    try:
+        import io
+
+        from PIL import Image
+
+        raw = base64.b64decode(uri.split(",", 1)[1])
+        with Image.open(io.BytesIO(raw)) as im:
+            return uri, im.size[0], im.size[1]
+    except Exception:
+        return uri, 0, 0
+
+
+def media_needs_stack(sizes, ratio=1.25):
+    """竖图要纵向排列。
+
+    多图版式用 object-fit: cover 把图裁成固定高度，竖图（高/宽 > 1.25，
+    比如手机截图 1:2）会被上下切掉，所以这类卡片改成纵向堆叠、整张显示。
+    """
+    return any(h and w and h / w > ratio for w, h in sizes)
+
+
 async def prepare(client, card, text_length=420, show_images=True, comments_mode=False):
     """下载图片、截断文字，返回可以直接套模板的卡片。
 
@@ -57,12 +83,14 @@ async def prepare(client, card, text_length=420, show_images=True, comments_mode
     avatar = (c.get("author") or {}).get("avatar")
     imgs = c.get("images") if show_images else []
     results = await asyncio.gather(
-        _data_uri(client, avatar, ref),
-        *[_data_uri(client, u, ref) for u in (imgs or [])[:4]],
+        _image_info(client, avatar, ref),
+        *[_image_info(client, u, ref) for u in (imgs or [])[:4]],
     )
     if c.get("author"):
-        c["author"] = dict(c["author"], avatar=results[0])
-    c["images"] = [u for u in results[1:] if u]
+        c["author"] = dict(c["author"], avatar=results[0][0])
+    pics = results[1:]
+    c["images"] = [x[0] for x in pics if x[0]]
+    c["media_tall"] = media_needs_stack([(w, h) for _, w, h in pics if w and h])
     c["title"] = _clip(c.get("title"), 140)
     c["text"] = _clip(c.get("text"), text_length)
     c["comments"] = [dict(x, text=_clip(x.get("text"), 300 if comments_mode else 140))

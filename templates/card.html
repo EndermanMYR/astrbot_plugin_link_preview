@@ -77,6 +77,10 @@
   .media.n3 { grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; height: 280px; }
   .media.n3 img:first-child { grid-row: span 2; }
   .media.n4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; height: 320px; }
+  /* 竖图（手机截图那种 1:2）：改成纵向堆叠，整张显示。
+     多图网格用的是 object-fit: cover + 固定高度，竖图会被上下裁掉。 */
+  .media.stack { display: flex; flex-direction: column; gap: 6px; height: auto; }
+  .media.stack img { width: auto; max-width: 100%; max-height: 520px; margin: 0 auto; object-fit: contain; }
   .media.blur img { filter: blur(26px) saturate(.6); transform: scale(1.15); }
   .veil { position: absolute; inset: 0; display: grid; place-items: center; font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
   .play { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%;
@@ -130,7 +134,7 @@
     {% if c.quote %}<div class="quote"><b>{{ c.quote.author }}</b><p>{{ c.quote.text }}</p></div>{% endif %}
 
     {% if c.images %}
-    <div class="media n{{ c.images|length }}{% if c.sensitive and c.blur %} blur{% endif %}">
+    <div class="media n{{ c.images|length }}{% if c.media_tall %} stack{% endif %}{% if c.sensitive and c.blur %} blur{% endif %}">
       {% for img in c.images %}<img src="{{ img }}">{% endfor %}
       {% if c.sensitive and c.blur %}<div class="veil">敏感内容，图片已模糊</div>
       {% elif c.video %}<div class="play"></div>{% if c.duration %}<div class="dur">{{ c.duration }}</div>{% endif %}{% endif %}
