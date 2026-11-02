@@ -107,6 +107,18 @@
             }
         }
     },
+    "translate_target": {
+        "description": "翻译目标语言",
+        "type": "string",
+        "default": "简体中文",
+        "hint": "用 AstrBot 当前配置的对话模型翻译，不需要额外 API Key。改成「繁体中文」「English」也行"
+    },
+    "translate_auto": {
+        "description": "自动翻译非中文帖子",
+        "type": "bool",
+        "default": false,
+        "hint": "开了之后，日文/韩文/英文的帖子会自动加一段译文。每张卡片多一次模型调用，出图会慢几秒；中文帖子不会触发"
+    },
     "comment_count": {
         "description": "卡片里显示几条热门评论",
         "type": "int",

@@ -22,6 +22,7 @@ HELP = """外链预览
 群里发 YouTube / TikTok / Instagram / X / GitHub / Reddit / Bluesky / pixiv / Steam / 维基百科 / 维基文库 / Dailymotion / niconico / Spotify 等链接，会自动回一张预览卡片（带几条热门评论）。
 /预览 链接：手动预览任意网页链接（也可用 /preview）
 /评论 [链接]：单独看一条链接的评论，最多 10 条；不带链接时用本群最近预览过的那条（也可用 /comments）
+/翻译 [链接]：把这条链接的标题和正文翻译成中文，出一张带译文的卡片（也可用 /translate）
 /全文 [维基链接]：把维基百科词条或维基文库作品的全文分页，合并转发发出（也可用 /维基全文）
 /预览图片 [开/关/默认]：管理员切换本群卡片是否显示配图和封面，不带参数查看当前状态
 /预览帮助：查看这条帮助
@@ -342,6 +343,36 @@ class LinkPreviewPlugin(Star):
             return bool(self._img_switch[session])
         return _bool(self.config.get("show_images", True), True)
 
+    async def _translate_text(self, text, umo=None, timeout=45):
+        """调 AstrBot 当前使用的对话模型翻译。没配模型就抛错。"""
+        try:
+            provider = self.context.get_using_provider(umo)
+        except ValueError as e:      # 该会话配的不是对话模型（比如选成了 TTS）
+            raise RuntimeError(f"当前会话的模型不能用来翻译：{e}") from e
+        if not provider:
+            raise RuntimeError("没有可用的对话模型，请先在 AstrBot 里配置 LLM 提供商")
+        target = str(self.config.get("translate_target", "简体中文") or "简体中文").strip()
+        resp = await asyncio.wait_for(
+            provider.text_chat(
+                prompt=text,
+                system_prompt=(f"把用户给的内容翻译成{target}。只输出译文，保留原有换行和分段，"
+                               "不要解释、不要加引号、不要重复原文。"),
+                contexts=[],
+            ),
+            timeout,
+        )
+        out = (getattr(resp, "completion_text", "") or "").strip()
+        if not out:
+            raise RuntimeError("模型没有返回内容")
+        return out
+
+    async def _translate_card(self, card, umo=None):
+        """翻译标题和正文，拼成一段放卡片里。"""
+        parts = [x.strip() for x in (card.get("title"), card.get("text")) if (x or "").strip()]
+        if not parts:
+            return None
+        return await self._translate_text("\n\n".join(parts), umo)
+
     async def _t2i(self, tmpl_path, data, out, attempts=3):
         """用 AstrBot 的文转图服务出图，失败重试，再裁掉多余留白。
 
@@ -376,7 +407,7 @@ class LinkPreviewPlugin(Star):
                 "theme": "light" if theme == "light" else "dark", "t2i": True}
         return await self._t2i(render.ARTICLE, data, out)
 
-    async def _make_card_image(self, platform, url, comments_mode=False, session=None):
+    async def _make_card_image(self, platform, url, comments_mode=False, session=None, translate=False):
         """抓取 + 渲染，返回图片路径；失败返回 None。"""
         n_comments = 10 if comments_mode else _int(self.config.get("comment_count", 3), 3, 0, 10)
         timeout = _int(self.config.get("fetch_timeout", 12), 12, 3, 60)
@@ -393,6 +424,15 @@ class LinkPreviewPlugin(Star):
             if x_task:
                 card["comments"] = await x_task
             card = self._filter_card(card)
+            auto = _bool(self.config.get("translate_auto", False), False)
+            if translate or (auto and fetchers.needs_translation(card.get("text") or card.get("title"))):
+                try:
+                    card["translation"] = await self._translate_card(card, session)
+                    logger.info("[LinkPreview] 已翻译卡片正文")
+                except Exception as e:  # noqa: BLE001 - 翻译失败不该影响出图
+                    logger.warning(f"[LinkPreview] 翻译失败：{e}")
+                    if translate:
+                        raise RuntimeError(f"翻译失败：{e}") from e
             if comments_mode and not card.get("comments"):
                 card["no_comments_reason"] = (
                     "这个平台拿不到评论" if platform not in fetchers.COMMENT_PLATFORMS else "暂时没有评论"
@@ -409,12 +449,12 @@ class LinkPreviewPlugin(Star):
         out = self.cache_dir / name
         return await self._render_html(render.TEMPLATE, card, out)
 
-    async def _preview(self, event, links, comments_mode=False, quiet=True):
+    async def _preview(self, event, links, comments_mode=False, quiet=True, translate=False):
         self._clean_cache()
         session = event.unified_msg_origin
         for platform, url in links:
             try:
-                path = await self._make_card_image(platform, url, comments_mode, session)
+                path = await self._make_card_image(platform, url, comments_mode, session, translate)
             except Blocked as e:
                 logger.info(f"[LinkPreview] {platform} {url} {'疑似成人内容' if isinstance(e, R18Blocked) else '命中屏蔽词'}，已拦截")
                 if not quiet or _bool(self.config.get("block_notice", True), True):
@@ -565,6 +605,20 @@ class LinkPreviewPlugin(Star):
             out = self.cache_dir / f"{stem}-{no:02d}.jpg"
             paths.append(await self._render_page(article, blocks, no, len(pages), hidden, theme, out))
         return paths, article, len(pages), hidden
+
+    @filter.command("翻译", alias={"translate", "翻译帖子"})
+    async def translate_cmd(self, event: AstrMessageEvent):
+        """翻译链接的标题和正文，出一张带译文的卡片。"""
+        links = self._links_from_command(event)
+        if not links:
+            last = self._last_link.get(event.unified_msg_origin)
+            if last:
+                links = [last]
+        if not links:
+            yield event.plain_result("用法：/翻译 链接（也可以先发一次链接，再发 /翻译）")
+            return
+        async for res in self._preview(event, links[:1], quiet=False, translate=True):
+            yield res
 
     @filter.command("全文", alias={"fulltext", "维基全文"})
     async def fulltext_cmd(self, event: AstrMessageEvent):

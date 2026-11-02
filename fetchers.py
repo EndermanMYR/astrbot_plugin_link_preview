@@ -187,6 +187,31 @@ def duration(seconds):
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
+CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+KANA_RE = re.compile(r"[\u3040-\u30ff]")
+HANGUL_RE = re.compile(r"[\uac00-\ud7af]")
+LATIN_RE = re.compile(r"[A-Za-z]")
+
+
+def needs_translation(text, min_latin=12):
+    """判断一段文字要不要翻译成中文。
+
+    日文（有假名）、韩文（有谚文）一律要翻；纯英文按拉丁字母数量判断；
+    中文为主的正文不翻，免得白烧一次模型调用。
+    """
+    t = str(text or "")
+    # 假名/谚文先判，短句（「안녕하세요」）也要翻
+    if KANA_RE.search(t) or HANGUL_RE.search(t):
+        return True
+    if len(t) < 6:
+        return False
+    han = len(CJK_RE.findall(t))
+    latin = len(LATIN_RE.findall(t))
+    if han == 0:
+        return latin >= min_latin
+    return latin >= min_latin and latin > han
+
+
 def flatten(text):
     """评论正文压成一行：X 的回复里常有多行和空行，原样渲染会在卡片上撑出大片空白。"""
     return re.sub(r"\s+", " ", str(text or "")).strip()

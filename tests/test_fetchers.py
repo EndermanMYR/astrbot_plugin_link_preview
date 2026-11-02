@@ -198,6 +198,29 @@ class TestPagination(unittest.TestCase):
         self.assertGreaterEqual(len(pages), 3)
 
 
+class TestNeedsTranslation(unittest.TestCase):
+    """翻译判定：日/韩一律翻，英文按字母数，中文不翻。"""
+
+    def test_english_needs_translation(self):
+        self.assertTrue(fetchers.needs_translation("just setting up my twttr"))
+        self.assertTrue(fetchers.needs_translation("Hello 世界 this is a test"))
+
+    def test_chinese_not_translated(self):
+        self.assertFalse(fetchers.needs_translation("可怜的大肥鱼，谁给你调成这样的"))
+        self.assertFalse(fetchers.needs_translation("这是一条中文微博，不需要翻译"))
+
+    def test_japanese_and_korean(self):
+        self.assertTrue(fetchers.needs_translation("これはテストです"))
+        self.assertTrue(fetchers.needs_translation("안녕하세요"))      # 短句也要翻
+        self.assertTrue(fetchers.needs_translation("テスト"))
+
+    def test_too_short_or_empty(self):
+        self.assertFalse(fetchers.needs_translation(""))
+        self.assertFalse(fetchers.needs_translation(None))
+        self.assertFalse(fetchers.needs_translation("OK"))
+        self.assertFalse(fetchers.needs_translation("12345"))
+
+
 class TestTextCleaning(unittest.TestCase):
     def test_flatten_collapses_whitespace(self):
         raw = "Hi\n@jack\n, I made  offer:\n\n\nhttps://v.cent.co/x\n@cent"

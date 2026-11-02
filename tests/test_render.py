@@ -82,6 +82,18 @@ class TestMediaLayout(unittest.TestCase):
         self.assertNotIn(" stack", render.build_html(card, "dark").split("<body")[1][:2000])
 
 
+class TestTranslationBlock(unittest.TestCase):
+    def test_renders_translation_block(self):
+        card = dict(CARD, translation="这是译文")
+        html = render.build_html(card, "dark")
+        self.assertIn('class="trans"', html)
+        self.assertIn("这是译文", html)
+
+    def test_no_block_without_translation(self):
+        html = render.build_html(dict(CARD, translation=None), "dark")
+        self.assertNotIn('class="trans"', html)
+
+
 class TestT2iOptions(unittest.TestCase):
     def test_returns_full_page_jpeg(self):
         opt = render.t2i_options()

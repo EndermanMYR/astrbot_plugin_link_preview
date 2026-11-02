@@ -93,6 +93,7 @@ async def prepare(client, card, text_length=420, show_images=True, comments_mode
     c["media_tall"] = media_needs_stack([(w, h) for _, w, h in pics if w and h])
     c["title"] = _clip(c.get("title"), 140)
     c["text"] = _clip(c.get("text"), text_length)
+    c["translation"] = _clip(c.get("translation"), text_length + 200)
     c["comments"] = [dict(x, text=_clip(x.get("text"), 300 if comments_mode else 140))
                      for x in c.get("comments") or [] if x.get("text")]
     if c.get("quote"):
