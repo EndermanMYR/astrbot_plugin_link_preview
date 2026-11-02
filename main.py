@@ -350,7 +350,8 @@ class LinkPreviewPlugin(Star):
             card = await fetchers.fetch(client, platform, url,
                                         github_token=self.config.get("github_token") or None,
                                         comments=n_comments,
-                                        steam_api_key=self.config.get("steam_api_key") or None)
+                                        steam_api_key=self.config.get("steam_api_key") or None,
+                                        x_service=self._x_service() if platform == "x" else None)
             if x_task:
                 card["comments"] = await x_task
             card = self._filter_card(card)

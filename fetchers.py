@@ -260,8 +260,8 @@ async def fetch_og(client, platform, url):
 # X / Twitter：fxtwitter 公共接口
 # ---------------------------------------------------------------------------
 
-async def fetch_x(client, url):
-    tid = LINK_PATTERNS[0][1].match(url).group(1)
+async def _x_card(client, url, tid):
+    """主数据源：fxtwitter 公开接口，能拿到配图、头像、引用推。"""
     r = await client.get(f"https://api.fxtwitter.com/status/{tid}")
     data = r.json() if r.status_code == 200 else {}
     t = data.get("tweet")
@@ -294,6 +294,46 @@ async def fetch_x(client, url):
         time=fmt_time(t.get("created_timestamp")), quote=quote_block,
         sensitive=bool(t.get("possibly_sensitive")),
     )
+
+
+async def _x_via_service(service_url, service_token, url, tid):
+    """降级一：走浏览器服务 /api/post。只有正文和三项计数，没有配图/头像。"""
+    async with httpx.AsyncClient(trust_env=False, timeout=90) as c:
+        r = await c.post(service_url.rstrip("/") + "/api/post",
+                         headers={"Authorization": "Bearer " + service_token},
+                         json={"value": tid, "ready_timeout_ms": 15000, "settle_ms": 800})
+    data = r.json() if "json" in r.headers.get("content-type", "") else {}
+    if r.status_code != 200:
+        raise FetchError(data.get("error") or f"浏览器服务 HTTP {r.status_code}")
+    items = data.get("items") or []
+    if not items:
+        raise FetchError("浏览器服务没拿到这条帖子")
+    it = items[0]
+    a = it.get("author") or {}
+    m = it.get("metrics") or {}
+    return card(
+        "x", url, text=it.get("text") or "",
+        author={"name": a.get("name"), "handle": "@" + (a.get("username") or ""), "avatar": None},
+        stats=[stat("回复", m.get("reply_count")), stat("转帖", m.get("retweet_count")),
+               stat("喜欢", m.get("like_count"))],
+        time=fmt_time(it.get("created_at")), sensitive=bool(it.get("sensitive")),
+        note="fxtwitter 暂时不可用，这张卡片由浏览器抓取，没有配图",
+    )
+
+
+async def fetch_x(client, url, service=None):
+    """三级降级：fxtwitter → 浏览器服务 → 页面 og 标签。"""
+    tid = LINK_PATTERNS[0][1].match(url).group(1)
+    try:
+        return await _x_card(client, url, tid)
+    except (FetchError, httpx.HTTPError, ValueError) as e:
+        logger.warning(f"[LinkPreview] fxtwitter 取不到 {tid}（{e}），尝试降级")
+    if service and all(service):
+        try:
+            return await _x_via_service(service[0], service[1], url, tid)
+        except Exception as e:  # noqa: BLE001 - 降级失败就再降一级
+            logger.warning(f"[LinkPreview] 浏览器服务也没拿到 {tid}：{e}")
+    return await fetch_og(client, "x", url)
 
 
 async def fetch_x_replies(service_url, token, tid, n=3, timeout=75, budget=25):
@@ -1118,24 +1158,6 @@ async def fetch_instagram(client, url):
 
 # ---------------------------------------------------------------------------
 # Dailymotion / niconico
-async def fetch_instagram_comments(service_url, service_token, url, cookie, n=3, timeout=90):
-    """走浏览器服务：用登录态渲染帖子页再抓 DOM，IG 私有接口对脚本一律拒绝。"""
-    if not service_url or not service_token:
-        raise FetchError("没配浏览器服务地址或 Token")
-    async with httpx.AsyncClient(trust_env=False, timeout=timeout) as c:
-        r = await c.post(service_url.rstrip("/") + "/api/ig_comments",
-                         headers={"Authorization": "Bearer " + service_token},
-                         json={"url": url, "count": max(1, n), "cookie": cookie})
-    data = r.json() if "json" in r.headers.get("content-type", "") else {}
-    if r.status_code != 200:
-        raise FetchError(data.get("error") or f"浏览器服务 HTTP {r.status_code}")
-    return [
-        {"author": x.get("author"), "text": x.get("text"), "likes": None, "time": None}
-        for x in (data.get("items") or []) if x.get("text")
-    ]
-
-
-# ---------------------------------------------------------------------------
 
 async def fetch_dailymotion(client, url):
     vid = next(pat for key, pat in LINK_PATTERNS if key == "dailymotion").match(url).group(1)
@@ -1212,9 +1234,9 @@ async def fetch_oembed(client, platform, url):
 COMMENT_PLATFORMS = {"youtube", "github", "bluesky", "pixiv", "tiktok", "x", "steam"}
 
 
-async def fetch(client, platform, url, github_token=None, comments=0, steam_api_key=None):
+async def fetch(client, platform, url, github_token=None, comments=0, steam_api_key=None, x_service=None):
     if platform == "x":
-        return await fetch_x(client, url)
+        return await fetch_x(client, url, x_service)
     if platform == "youtube":
         return await fetch_youtube(client, url, comments)
     if platform == "reddit":

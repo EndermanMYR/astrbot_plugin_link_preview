@@ -68,7 +68,7 @@
 | YouTube | 标题、频道、简介、封面、时长、播放/点赞 | ✔ 热门评论 |
 | TikTok | 视频封面或图集、作者、播放/点赞/评论/分享/收藏 | ✔ 按点赞排序 |
 | Instagram | 帖子和 Reels 的作者、配文、图片（通过公开的嵌入修复站读取） | ✘ 实测拿不到，见下方说明 |
-| X / Twitter | 正文、作者、配图、引用帖、回复/转帖/喜欢/浏览 | ✔ 需填 `x_cookie` + 浏览器服务（较慢，最多等 15 秒） |
+| X / Twitter | 正文、作者、配图、引用帖、回复/转帖/喜欢/浏览 | ✔ 需填 `x_cookie` + 浏览器服务（较慢，最多等 25 秒，可调） |
 | GitHub | 仓库、Issue、PR、用户主页 | ✔ Issue/PR 评论（填 `github_token` 免限流） |
 | Bluesky | 正文、作者、配图、互动数 | ✔ 按点赞排序的回复 |
 | pixiv | 标题、作者、标签、数据（R-18 不显示图片） | ✔ |
@@ -384,6 +384,16 @@ asyncio.run(main())
 ```
 
 上面 `docs/images/` 里的展示图就是这么生成的。只想改模板不想抓网络数据的话，可以直接构造一个卡片字典丢给 `render.build_html`，那样连浏览器都不用起。
+
+### 单元测试
+
+测试用标准库 `unittest`，不联网、不需要 AstrBot（`tests/_stub.py` 会在进程内伪造 `astrbot.api.logger`）：
+
+```bash
+python -m unittest discover -s tests -t . -v
+```
+
+覆盖的是容易悄悄坏掉的部分：链接识别（19 个平台）、数字/时长/时间格式化、OpenGraph 解析、全文分页、词表匹配（含插字写法）、配置项与抓取器是否对齐、发布包是否缺文件。CI 在 `.github/workflows/ci.yml`，推 main 就跑。
 
 ## ❤️ 致谢 | Credits
 
