@@ -61,7 +61,7 @@ class TestConfigSchema(unittest.TestCase):
 
     def test_wordlist_defaults_stay_inside_plugin_data(self):
         """市场审核要求：持久化文件不能落在插件数据目录之外。"""
-        for key in ("block_words_file", "r18_words_file"):
+        for key in ("block_words_file", "restricted_words_file"):
             default = self.schema[key]["default"]
             self.assertEqual(default, "", f"{key} 默认值应为空串，留空才走插件数据目录")
 
@@ -69,13 +69,19 @@ class TestConfigSchema(unittest.TestCase):
         for key in ("x_login_url", "instagram_cookie"):
             self.assertNotIn(key, self.schema, f"{key} 已移除，不该再出现在配置里")
 
+    def test_no_adult_keywords_in_schema(self):
+        """配置项和文案里不要出现成人相关字样，避免仓库被判定为成人内容。"""
+        text = read("_conf_schema.json").lower()
+        for word in ("r18", "r-18", "成人", "色情", "nsfw", "porn", "adult"):
+            self.assertNotIn(word, text, f"_conf_schema.json 里还有 {word}")
+
 
 class TestPackaging(unittest.TestCase):
     def test_required_files_present(self):
         for name in ("main.py", "fetchers.py", "render.py", "wordfilter.py", "requirements.txt",
                      "metadata.yaml", "_conf_schema.json", "LICENSE", "README.md",
                      "templates/card.html", "templates/article.html",
-                     "sensitive_words.txt", "r18_words.txt"):
+                     "sensitive_words.txt", "restricted_words.txt"):
             self.assertTrue(os.path.exists(os.path.join(ROOT, name)), f"缺少 {name}")
 
     def test_requirements_cover_imports(self):
@@ -108,6 +114,27 @@ class TestPackaging(unittest.TestCase):
         base = os.path.join(ROOT, "x-browser-service")
         for name in ("Dockerfile", "compose.yaml", "scraper.py", ".env.example"):
             self.assertTrue(os.path.exists(os.path.join(base, name)), f"缺少 x-browser-service/{name}")
+
+
+class TestNoAdultKeywords(unittest.TestCase):
+    """仓库里对外展示的文本不要出现成人相关字样，避免被判定为成人内容。"""
+
+    WORDS = ("r18", "r-18", "成人", "色情", "nsfw", "porn", "adult", "18+")
+
+    def test_readme(self):
+        text = read("README.md").lower()
+        for w in self.WORDS:
+            self.assertNotIn(w, text, f"README.md 里还有 {w}")
+
+    def test_metadata(self):
+        text = read("metadata.yaml").lower()
+        for w in self.WORDS:
+            self.assertNotIn(w, text, f"metadata.yaml 里还有 {w}")
+
+    def test_schema(self):
+        text = read("_conf_schema.json").lower()
+        for w in self.WORDS:
+            self.assertNotIn(w, text, f"_conf_schema.json 里还有 {w}")
 
 
 class TestReadme(unittest.TestCase):

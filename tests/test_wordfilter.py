@@ -89,7 +89,7 @@ class TestFileHandling(unittest.TestCase):
             self.assertEqual(f.find("这里有新词"), "新词")
 
     def test_bundled_wordlists_loadable(self):
-        for path in (wordfilter.BUNDLED, wordfilter.BUNDLED_R18):
+        for path in (wordfilter.BUNDLED, wordfilter.BUNDLED_RESTRICTED):
             words = wordfilter.parse_words(path.read_text(encoding="utf-8"))
             self.assertGreater(len(words), 100, f"{path.name} 词表太小，可能读错了")
 

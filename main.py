@@ -37,10 +37,9 @@ COMMAND_NAMES = {
 }
 # 词表默认放在插件数据目录（data/plugin_data/<插件名>/）下，随插件数据一起迁移和审计。
 WORDS_NAME = "political.txt"
-R18_NAME = "r18.txt"
+RESTRICTED_NAME = "restricted.txt"
 # 旧版本把词表写在 data/sensitive_words/，只在迁移时读取一次，不再往那里写。
 LEGACY_WORDS_FILE = "data/sensitive_words/political.txt"
-LEGACY_R18_FILE = "data/sensitive_words/r18.txt"
 BLOCK_NOTICE = "这个链接的内容包含屏蔽词，不予预览。"
 SEND_FAIL_NOTICE = "这张预览卡片发送失败（可能被 QQ 拦截了），请直接点链接查看。"
 REPLY_BLOCK_NOTICE = "（这条回复包含屏蔽词，已拦截）"
@@ -68,8 +67,8 @@ class Blocked(Exception):
     notice = None
 
 
-class R18Blocked(Blocked):
-    """内容可能是成人内容（命中 R18 词表，或被平台标记为敏感）。"""
+class RestrictedBlocked(Blocked):
+    """内容被判定为不适宜（命中分级词表，或被平台标记）。"""
     notice = "这个链接可能含成人内容，不予预览。"
 
 
@@ -111,13 +110,13 @@ class LinkPreviewPlugin(Star):
         except OSError as e:
             logger.error(f"[LinkPreview] 敏感词表加载失败：{e}")
             self.filter = wordfilter.WordFilter(None, self.config.get("block_words") or [])
-        r18_file = self._words_path("r18_words_file", R18_NAME, LEGACY_R18_FILE)
+        restricted_file = self._words_path("restricted_words_file", RESTRICTED_NAME, None)
         try:
-            self.r18 = wordfilter.WordFilter(r18_file, self.config.get("r18_words") or [], wordfilter.BUNDLED_R18)
-            logger.info(f"[LinkPreview] R18 词表已加载 {self.r18.count} 个词：{r18_file}")
+            self.restricted = wordfilter.WordFilter(restricted_file, self.config.get("restricted_words") or [], wordfilter.BUNDLED_RESTRICTED)
+            logger.info(f"[LinkPreview] 分级词表已加载 {self.restricted.count} 个词：{restricted_file}")
         except OSError as e:
-            logger.error(f"[LinkPreview] R18 词表加载失败：{e}")
-            self.r18 = wordfilter.WordFilter(None, self.config.get("r18_words") or [], wordfilter.BUNDLED_R18)
+            logger.error(f"[LinkPreview] 分级词表加载失败：{e}")
+            self.restricted = wordfilter.WordFilter(None, self.config.get("restricted_words") or [], wordfilter.BUNDLED_RESTRICTED)
 
     async def initialize(self):
         """插件被激活时调用；这里才保证有事件循环，用来写入手填的 Cookie。"""
@@ -180,14 +179,14 @@ class LinkPreviewPlugin(Star):
         return self.config.get("block_mode", "整条不发") == "打码后发送"
 
     def _filter_card(self, card):
-        """评论命中的单独去掉；正文命中按设置整条不发或打码。R18 内容一律整条不发。"""
-        if _bool(self.config.get("r18_enabled", True), True):
-            card["comments"] = [c for c in card.get("comments") or [] if not self.r18.find(c.get("author"), c.get("text"))]
+        """评论命中的单独去掉；正文命中按设置整条不发或打码。分级内容一律整条不发。"""
+        if _bool(self.config.get("restricted_enabled", True), True):
+            card["comments"] = [c for c in card.get("comments") or [] if not self.restricted.find(c.get("author"), c.get("text"))]
             a, q = card.get("author") or {}, card.get("quote") or {}
-            flagged = card.get("sensitive") and _bool(self.config.get("r18_block_flagged", True), True)
-            if flagged or self.r18.find(card.get("title"), card.get("text"), a.get("name"), a.get("handle"),
+            flagged = card.get("sensitive") and _bool(self.config.get("restricted_block_flagged", True), True)
+            if flagged or self.restricted.find(card.get("title"), card.get("text"), a.get("name"), a.get("handle"),
                                         a.get("bio"), q.get("text"), " ".join(card.get("tags") or [])):
-                raise R18Blocked()
+                raise RestrictedBlocked()
         if not self._block_on():
             return card
         f = self.filter
@@ -224,9 +223,9 @@ class LinkPreviewPlugin(Star):
         texts = [article.get("title"), article.get("byline")]
         for s in article["sections"]:
             texts += [s.get("title"), s.get("text")]
-        # R18 一律整条不发，不打码（和卡片走同一套判定）
-        if _bool(self.config.get("r18_enabled", True), True) and self.r18.find(*texts):
-            raise R18Blocked()
+        # 分级内容一律整条不发，不打码（和卡片走同一套判定）
+        if _bool(self.config.get("restricted_enabled", True), True) and self.restricted.find(*texts):
+            raise RestrictedBlocked()
         if not self._block_on():
             return article
         f = self.filter
@@ -477,7 +476,7 @@ class LinkPreviewPlugin(Star):
             try:
                 path = await self._make_card_image(platform, url, comments_mode, session, translate)
             except Blocked as e:
-                logger.info(f"[LinkPreview] {platform} {url} {'疑似成人内容' if isinstance(e, R18Blocked) else '命中屏蔽词'}，已拦截")
+                logger.info(f"[LinkPreview] {platform} {url} {'疑似不适宜内容' if isinstance(e, RestrictedBlocked) else '命中屏蔽词'}，已拦截")
                 if not quiet or _bool(self.config.get("block_notice", True), True):
                     yield event.plain_result(e.notice or BLOCK_NOTICE)
                 continue
@@ -545,8 +544,8 @@ class LinkPreviewPlugin(Star):
         if not result or not result.chain:
             return
         text = self._chain_text(result.chain)
-        r18_hit = _bool(self.config.get("r18_outgoing", False)) and self.r18.find(text)
-        if text and (self.filter.find(text) or r18_hit):
+        restricted_hit = _bool(self.config.get("restricted_outgoing", False)) and self.restricted.find(text)
+        if text and (self.filter.find(text) or restricted_hit):
             logger.info(f"[LinkPreview] 拦下一条含屏蔽词的回复，不发送（{event.unified_msg_origin}）")
             if _bool(self.config.get("block_notice", True), True):
                 result.chain = [Comp.Plain(REPLY_BLOCK_NOTICE)]
@@ -664,7 +663,7 @@ class LinkPreviewPlugin(Star):
         try:
             paths, article, total, hidden = await self._render_article(platform, url)
         except Blocked as e:
-            logger.info(f"[LinkPreview] 全文 {url} {'疑似成人内容' if isinstance(e, R18Blocked) else '命中屏蔽词'}，已拦截")
+            logger.info(f"[LinkPreview] 全文 {url} {'疑似不适宜内容' if isinstance(e, RestrictedBlocked) else '命中屏蔽词'}，已拦截")
             yield event.plain_result(e.notice or BLOCK_NOTICE)
             return
         except Exception as e:

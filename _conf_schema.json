@@ -35,7 +35,7 @@
                 "default": true
             },
             "pixiv": {
-                "description": "pixiv（R-18 作品不显示图片）",
+                "description": "pixiv（分级 作品不显示图片）",
                 "type": "bool",
                 "default": true
             },
@@ -280,34 +280,34 @@
         "default": true,
         "hint": "关闭后：自动预览命中屏蔽词时静默跳过，机器人自己的回复命中时直接不发。指令被拦截、卡片被 QQ 拒收时总会提醒"
     },
-    "r18_enabled": {
-        "description": "启用 R18 过滤",
+    "restricted_enabled": {
+        "description": "启用分级过滤",
         "type": "bool",
         "default": true,
-        "hint": "卡片的标题、正文、作者、标签命中 R18 词表就整条不发；命中的评论单独去掉。维基 /全文 不做 R18 检查"
+        "hint": "卡片的标题、正文、作者、标签命中分级词表就整条不发；命中的评论单独去掉。维基 /全文 不做分级检查"
     },
-    "r18_block_flagged": {
-        "description": "平台标记为敏感的也整条不发",
+    "restricted_block_flagged": {
+        "description": "平台标记为分级内容的也整条不发",
         "type": "bool",
         "default": true,
-        "hint": "X、Bluesky、Reddit 的敏感标记和 pixiv 的 R-18。关闭后只把配图模糊"
+        "hint": "X、Bluesky、Reddit 的敏感标记和 pixiv 的分级。关闭后只把配图模糊"
     },
-    "r18_words_file": {
-        "description": "R18 词表文件",
+    "restricted_words_file": {
+        "description": "分级过滤词表文件",
         "type": "string",
         "default": "",
-        "hint": "留空则用插件数据目录下的 r18.txt（随插件数据一起备份迁移）。也可以填绝对路径或相对 AstrBot 工作目录的路径；不存在时用插件自带的词表创建（合并了插件内置词表和你在配置里维护的词）。改完立即生效"
+        "hint": "留空则用插件数据目录下的 restricted.txt（随插件数据一起备份迁移）。也可以填绝对路径或相对 AstrBot 工作目录的路径；不存在时用插件自带的词表创建（合并了插件内置词表和你在配置里维护的词）。改完立即生效"
     },
-    "r18_words": {
-        "description": "额外 R18 词",
+    "restricted_words": {
+        "description": "额外分级过滤词",
         "type": "list",
         "default": []
     },
-    "r18_outgoing": {
-        "description": "机器人自己的回复也查 R18",
+    "restricted_outgoing": {
+        "description": "机器人自己的回复也查分级词",
         "type": "bool",
         "default": false,
-        "hint": "打开后大模型回复里出现 R18 词也会被拦下；容易误伤正常聊天，默认关"
+        "hint": "打开后大模型回复里出现分级词也会被拦下；容易误伤正常聊天，默认关"
     },
     "block_outgoing": {
         "description": "机器人自己的回复也检查",

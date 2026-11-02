@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 BUNDLED = Path(__file__).parent / "sensitive_words.txt"
-BUNDLED_R18 = Path(__file__).parent / "r18_words.txt"
+BUNDLED_RESTRICTED = Path(__file__).parent / "restricted_words.txt"
 
 # 中文匹配前先去掉常被插在字中间的符号：空格、零宽字符、间隔号、星号、斜杠等。
 # 句号、逗号这类断句标点不去掉，免得「…在台。独自…」被拼成「台独」误判。
