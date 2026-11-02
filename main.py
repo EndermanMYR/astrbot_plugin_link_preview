@@ -22,7 +22,7 @@ HELP = """外链预览
 群里发 YouTube / TikTok / Instagram / X / GitHub / Reddit / Bluesky / pixiv / Steam / 维基百科 / 维基文库 / Dailymotion / niconico / Spotify 等链接，会自动回一张预览卡片（带几条热门评论）。
 /预览 链接：手动预览任意网页链接（也可用 /preview）
 /评论 [链接]：单独看一条链接的评论，最多 10 条；不带链接时用本群最近预览过的那条（也可用 /comments）
-/翻译 [链接]：把这条链接的标题和正文翻译成中文（外语帖子默认已自动翻译，这张卡上就有；也可用 /translate）
+/翻译 [链接]：只回这段内容的译文文本，不出卡片、不发原文（外语帖子默认已在卡片里带译文）
 /全文 [维基链接]：把维基百科词条或维基文库作品的全文分页，合并转发发出（也可用 /维基全文）
 /预览图片 [开/关/默认]：管理员切换本群卡片是否显示配图和封面，不带参数查看当前状态
 /预览帮助：查看这条帮助
@@ -96,8 +96,6 @@ class LinkPreviewPlugin(Star):
         except (OSError, ValueError):
             self._img_switch = {}
         self._recent = {}      # (会话, 链接) -> 上次预览时间，用来去重
-        # 哪些链接最近发出的卡片已经带译文：会话+链接 -> 时间
-        self._translated = {}
         self._last_link = {}   # 会话 -> 最近一次预览的 (平台, 链接)，给 /评论 用
         self._x_replies = {}   # 帖子 ID -> (时间, 回复列表)；后台没等完的结果留给 /评论 用
         words_file = self._words_path("block_words_file", WORDS_NAME, LEGACY_WORDS_FILE)
@@ -318,20 +316,19 @@ class LinkPreviewPlugin(Star):
                 parts.append(data.replace("\\/", "/"))
         return "\n".join(parts)
 
-    def _translated_recently(self, session, url):
-        """这张链接最近发出的卡片是不是已经带译文了（避免 /翻译 重复发卡）。"""
-        window = max(_int(self.config.get("dedupe_seconds", 30), 30, 0, 86400), 60)
-        key = (session, fetchers.canonical_url(url))
-        return time.time() - self._translated.get(key, 0) < window
-
-    def _mark_translated(self, session, url):
-        key = (session, fetchers.canonical_url(url))
-        self._translated[key] = time.time()
-        # 顺手清过期记录
-        cutoff = time.time() - 3600
-        for k, t in list(self._translated.items()):
-            if t < cutoff:
-                self._translated.pop(k, None)
+    async def _translate_only(self, event, platform, url):
+        """只抓取并翻译，不出卡片（/翻译 指令用）。"""
+        timeout = _int(self.config.get("fetch_timeout", 12), 12, 3, 60)
+        async with fetchers.make_client(self.config.get("proxy") or None, timeout) as client:
+            card = await fetchers.fetch(
+                client, platform, url,
+                github_token=self.config.get("github_token") or None,
+                comments=0,
+                steam_api_key=self.config.get("steam_api_key") or None,
+                x_service=self._x_service() if platform == "x" else None,
+            )
+        card = self._filter_card(card)
+        return await self._translate_card(card, event.unified_msg_origin)
 
     def _duplicate(self, session, url):
         window = _int(self.config.get("dedupe_seconds", 30), 30, 0, 86400)
@@ -445,8 +442,6 @@ class LinkPreviewPlugin(Star):
             if translate or (auto and fetchers.needs_translation(card.get("text") or card.get("title"))):
                 try:
                     card["translation"] = await self._translate_card(card, session)
-                    if card.get("translation"):
-                        self._mark_translated(session, url)
                     logger.info("[LinkPreview] 已翻译卡片正文")
                 except Exception as e:  # noqa: BLE001 - 翻译失败不该影响出图
                     logger.warning(f"[LinkPreview] 翻译失败：{e}")
@@ -645,13 +640,19 @@ class LinkPreviewPlugin(Star):
             return
 
         platform, url = links[0]
-        # 上面那张卡已经带译文了，就别再发一张一样的
-        if self._translated_recently(event.unified_msg_origin, url):
-            yield event.plain_result("上面那张卡片已经带译文了")
+        try:
+            translated = await self._translate_only(event, platform, url)
+        except Blocked as e:
+            yield event.plain_result(e.notice or BLOCK_NOTICE)
             return
-
-        async for res in self._preview(event, links[:1], quiet=False, translate=True):
-            yield res
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[LinkPreview] 翻译失败：{e}")
+            yield event.plain_result(f"翻译失败：{e}")
+            return
+        if not translated:
+            yield event.plain_result("这条没有可翻译的正文")
+            return
+        yield event.plain_result(translated)
 
     @filter.command("全文", alias={"fulltext", "维基全文"})
     async def fulltext_cmd(self, event: AstrMessageEvent):
