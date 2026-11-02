@@ -1,3 +1,11 @@
+> 此分支基于 v2.5.0，新增 B站（bilibili）、抖音（douyin）、小红书（xiaohongshu）、微博（weibo）、知乎（zhihu）。
+>
+> B站支持 BV/av 视频及 b23.tv 短链，读取标题、UP主、封面、时长及互动数。其余四个平台读取公开分享页的标题、简介、封面；抖音和小红书支持常见分享短链。不是完整 App 内容抓取，不支持登录后内容、验证码绕过或国内平台评论。平台仅返回登录/验证页时会明确失败；页面结构和网络风控可能影响可用性。
+>
+> 网络安全：预览和配图仅访问解析到公网 IP 的 HTTP(S) 地址，每次连接（含跳转）固定已验证 IP；不自动使用环境代理，仍支持配置项 proxy。Fake-IP DNS（例如部分 TUN 模式）会被拒绝，需对这些域名使用真实 DNS。管理员配置的 X 内网服务使用独立客户端，不受公网限制。GitHub 私有仓库被拒绝；图片只允许常见位图类型，并在读取时限制大小。正文响应上限 8 MiB。
+>
+> 新增平台可在 platforms 中分别关闭。X 预览不再使用登录态正文降级；评论只采用公开接口能读取的内容，公开接口不可用时会减少评论。正文响应只接受未压缩传输，拒绝不遵守 Accept-Encoding: identity 的响应，以防解压膨胀；这可能影响少数站点。升级保留现有插件数据。
+
 # ✨ 外链预览 | Link Preview (AstrBot Plugin)
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
@@ -37,7 +45,7 @@
 ## ✅ 功能列表 | Features
 
 - **自动识别**：群消息里出现链接就自动出卡片，不需要 @ 或指令
-- **19 个平台**：YouTube、TikTok、Instagram、X、GitHub、Bluesky、pixiv、Steam、Reddit、维基百科、维基文库、Dailymotion、niconico、Spotify、Vimeo、SoundCloud、Threads、Twitch、Facebook
+- **24 个平台**：YouTube、TikTok、Instagram、X、GitHub、Bluesky、pixiv、Steam、Reddit、维基百科、维基文库、Dailymotion、niconico、Spotify、Vimeo、SoundCloud、Threads、Twitch、Facebook
 - **热门评论**：YouTube、TikTok、X、Instagram、GitHub Issue/PR、Bluesky、pixiv、Steam 的卡片会附带几条高赞评论
 - **评论靠 Cookie**：X 需要登录态，填 `x_cookie` 即可，不用在服务器上跑浏览器登录
 - **Steam 评测**：抓社区里最有帮助的评测，带推荐/不推荐、游玩时长和赞数；填了 Web API Key 还能显示当前在线人数
@@ -362,7 +370,7 @@ asyncio.run(main())
 python -m unittest discover -s tests -t . -v
 ```
 
-覆盖的是容易悄悄坏掉的部分：链接识别（19 个平台）、数字/时长/时间格式化、OpenGraph 解析、全文分页、词表匹配（含插字写法）、配置项与抓取器是否对齐、发布包是否缺文件、模板字体栈顺序、裁边逻辑。CI 在 `.github/workflows/ci.yml`，推 main 就跑。
+覆盖的是容易悄悄坏掉的部分：链接识别（24 个平台）、数字/时长/时间格式化、OpenGraph 解析、全文分页、词表匹配（含插字写法）、配置项与抓取器是否对齐、发布包是否缺文件、模板字体栈顺序、裁边逻辑。CI 在 `.github/workflows/ci.yml`，推 main 就跑。
 
 ### 单元测试
 
@@ -372,7 +380,7 @@ python -m unittest discover -s tests -t . -v
 python -m unittest discover -s tests -t . -v
 ```
 
-覆盖的是容易悄悄坏掉的部分：链接识别（19 个平台）、数字/时长/时间格式化、OpenGraph 解析、全文分页、词表匹配（含插字写法）、配置项与抓取器是否对齐、发布包是否缺文件。CI 在 `.github/workflows/ci.yml`，推 main 就跑。
+覆盖的是容易悄悄坏掉的部分：链接识别（24 个平台）、数字/时长/时间格式化、OpenGraph 解析、全文分页、词表匹配（含插字写法）、配置项与抓取器是否对齐、发布包是否缺文件。CI 在 `.github/workflows/ci.yml`，推 main 就跑。
 
 ## ❤️ 致谢 | Credits
 

@@ -104,6 +104,31 @@
                 "description": "niconico（ニコニコ動画）",
                 "type": "bool",
                 "default": true
+            },
+            "bilibili": {
+                "type": "bool",
+                "description": "哔哩哔哩",
+                "default": true
+            },
+            "douyin": {
+                "type": "bool",
+                "description": "抖音",
+                "default": true
+            },
+            "xiaohongshu": {
+                "type": "bool",
+                "description": "小红书",
+                "default": true
+            },
+            "weibo": {
+                "type": "bool",
+                "description": "微博",
+                "default": true
+            },
+            "zhihu": {
+                "type": "bool",
+                "description": "知乎",
+                "default": true
             }
         }
     },
