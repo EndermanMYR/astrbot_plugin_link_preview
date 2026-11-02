@@ -5,8 +5,10 @@ name: Docker Image
 on:
   push:
     branches: [main]
+    # 只有镜像内容变了才重建：改 compose / 文档不用重跑（省 CI 时间）
     paths:
-      - "x-browser-service/**"
+      - "x-browser-service/scraper.py"
+      - "x-browser-service/Dockerfile"
       - ".github/workflows/docker.yml"
     tags: ["v*"]
   workflow_dispatch:

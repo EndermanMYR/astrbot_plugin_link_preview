@@ -1,13 +1,17 @@
 services:
   xbrowser:
-    # 默认用 GitHub Actions 构建好的镜像，省掉本地 10 分钟的 chromium + pip 安装；
-    # 拉不到（没网、镜像还没发布）会自动退回本地构建，所以没有 Docker Hub 账号也能用
-    image: ${XBROWSER_IMAGE:-ghcr.io/endermanmyr/astrbot-xbrowser:latest}
+    # 默认本地构建，不联网拉镜像：装一次 chromium 之后层都缓存在本机，
+    # 改 scraper.py 时重建只要几秒。想省掉第一次那 10 分钟，见下面注释。
+    image: ${XBROWSER_IMAGE:-astrbot-xbrowser:latest}
     build:
       context: .
       args:
-        # 国内构建慢/卡住时，在 .env 里设 PIP_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
+        # 国内构建卡在 PyPI 时，在 .env 里设 PIP_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
         PIP_INDEX: ${PIP_INDEX:-}
+    # 想用 GitHub Actions 预构建好的镜像（不本地构建）：
+    #   在 .env 里加 XBROWSER_IMAGE=ghcr.io/endermanmyr/astrbot-xbrowser:latest
+    #   然后 docker compose up -d
+    # 注意 ghcr.io 在部分网络环境下不可达，连不上就保持默认的本地构建
     restart: unless-stopped
     # 不再加 init: true —— 镜像的 ENTRYPOINT 已经是 tini，
     # 两层叠一起会报 "Tini is not running as PID 1"

@@ -11,13 +11,20 @@ cp .env.example .env
 docker compose up -d
 ```
 
-**默认直接拉预构建镜像** `ghcr.io/endermanmyr/astrbot-xbrowser:latest`，几秒钟起好，不用在本机装 chromium 和 Python 依赖。镜像由 GitHub Actions 在每次改动后自动构建（[workflow](../.github/workflows/docker.yml)），公共可拉，不需要登录。
-
-拉不到时（没网、公司代理拦 ghcr.io、或者你想自己改代码）会自动退回本地构建，`docker compose up -d --build` 也一样能跑。本地构建约 10 分钟，主要花在装 chromium 上；国内网络卡在 PyPI 时在 `.env` 里加一行：
+**默认本地构建，不联网拉镜像。** 第一次约 10 分钟，主要花在装 chromium 上；之后层都在本机缓存里，改 `scraper.py` 重建只要几秒。国内网络卡在 PyPI 时在 `.env` 里加一行：
 
 ```dotenv
 PIP_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
 ```
+
+不想等第一次构建的话，可以用 GitHub Actions 预构建好的镜像（公共可拉，不需要登录）：
+
+```dotenv
+# .env
+XBROWSER_IMAGE=ghcr.io/endermanmyr/astrbot-xbrowser:latest
+```
+
+然后 `docker compose up -d`，几秒钟起好。注意 `ghcr.io` 在部分网络环境下不可达，连不上就删掉这行、用默认的本地构建。镜像每次改动后由 [workflow](../.github/workflows/docker.yml) 自动构建。
 
 `.env` 示例：
 

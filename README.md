@@ -230,10 +230,10 @@ X 卡片本身走公开接口，不需要登录；只有「热门评论」需要
 ```bash
 cd x-browser-service
 cp .env.example .env      # 填 Token，确认 Cookie 目录
-docker compose up -d      # 直接拉预构建镜像，不用本地构建
+docker compose up -d      # 本地构建，约 10 分钟（主要花在装 chromium）
 ```
 
-镜像由 GitHub Actions 构建好放在 `ghcr.io/endermanmyr/astrbot-xbrowser`，公共可拉。拉不到会自动退回本地构建（约 10 分钟，主要花在装 chromium 上）。
+不想等第一次构建的话，在 `.env` 里加 `XBROWSER_IMAGE=ghcr.io/endermanmyr/astrbot-xbrowser:latest` 就能直接拉预构建镜像。`ghcr.io` 在部分网络下不可达，连不上就用默认的本地构建。
 
 再把地址和 Token 填进 `x_browser_url` / `x_browser_token`。不部署也不影响其他平台，只是 X 卡片没有评论。
 
