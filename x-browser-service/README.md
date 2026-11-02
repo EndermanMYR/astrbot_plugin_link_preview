@@ -11,6 +11,14 @@ cp .env.example .env
 docker compose up -d
 ```
 
+**默认直接拉预构建镜像** `ghcr.io/endermanmyr/astrbot-xbrowser:latest`，几秒钟起好，不用在本机装 chromium 和 Python 依赖。镜像由 GitHub Actions 在每次改动后自动构建（[workflow](../.github/workflows/docker.yml)），公共可拉，不需要登录。
+
+拉不到时（没网、公司代理拦 ghcr.io、或者你想自己改代码）会自动退回本地构建，`docker compose up -d --build` 也一样能跑。本地构建约 10 分钟，主要花在装 chromium 上；国内网络卡在 PyPI 时在 `.env` 里加一行：
+
+```dotenv
+PIP_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
 `.env` 示例：
 
 ```dotenv
@@ -18,13 +26,14 @@ X_LOGIN_SERVICE_TOKEN=你的随机Token（32 字符以上）
 ASTRBOT_COOKIE_DIR=/opt/astrbot/data/plugin_data/astrbot_plugin_link_preview
 LOGIN_UID=1000
 LOGIN_GID=1000
-X_SCRAPER_IDLE=300
+X_SCRAPER_IDLE=1800
 ```
 
 - `X_LOGIN_SERVICE_TOKEN` 就是插件配置里的 `x_browser_token`，两边必须一致。
 - `ASTRBOT_COOKIE_DIR` 是**宿主机**目录，插件会把 `x_cookie` 写到这里，容器挂载成 `/cookies`。
 - `LOGIN_UID` / `LOGIN_GID` 是容器运行用户，需与写文件的进程一致（容器内 AstrBot 是 root 时填 `0`、`0`）。
-- `X_SCRAPER_IDLE` 空闲多少秒关掉浏览器，默认 300。
+- `X_SCRAPER_IDLE` 空闲多少秒关掉浏览器，默认 1800。调小省内存，调大减少冷启动（冷启动多花 8~10 秒）。
+- `XBROWSER_IMAGE` 想换镜像源时改这个；`PIP_INDEX` 只在本地构建时生效。
 
 ## 接口
 

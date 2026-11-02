@@ -199,6 +199,12 @@ class TestPagination(unittest.TestCase):
 
 
 class TestTextCleaning(unittest.TestCase):
+    def test_flatten_collapses_whitespace(self):
+        raw = "Hi\n@jack\n, I made  offer:\n\n\nhttps://v.cent.co/x\n@cent"
+        self.assertEqual(fetchers.flatten(raw), "Hi @jack , I made offer: https://v.cent.co/x @cent")
+        self.assertEqual(fetchers.flatten(None), "")
+        self.assertEqual(fetchers.flatten("  "), "")
+
     def test_steam_plain_strips_bbcode(self):
         raw = "[b]标题[/b] 正文 [url=https://a.b]链接[/url] [spoiler]剧透[/spoiler]"
         out = fetchers._steam_plain(raw)

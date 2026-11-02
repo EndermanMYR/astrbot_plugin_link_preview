@@ -187,6 +187,11 @@ def duration(seconds):
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
+def flatten(text):
+    """评论正文压成一行：X 的回复里常有多行和空行，原样渲染会在卡片上撑出大片空白。"""
+    return re.sub(r"\s+", " ", str(text or "")).strip()
+
+
 def stat(label, value):
     if value is None or value == "":
         return None
@@ -360,7 +365,7 @@ async def fetch_x_replies(service_url, token, tid, n=3, timeout=75, budget=25):
         a = x.get("author") or {}
         likes = (x.get("metrics") or {}).get("like_count")
         out.append({"author": a.get("name") or ("@" + a["username"] if a.get("username") else None),
-                    "text": x.get("text"), "likes": compact(likes) if likes else None,
+                    "text": flatten(x.get("text")), "likes": compact(likes) if likes else None,
                     "time": fmt_time(x.get("created_at"))})
         if len(out) >= n:
             break

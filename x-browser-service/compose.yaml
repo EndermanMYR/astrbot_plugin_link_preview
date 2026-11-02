@@ -9,7 +9,8 @@ services:
         # 国内构建慢/卡住时，在 .env 里设 PIP_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
         PIP_INDEX: ${PIP_INDEX:-}
     restart: unless-stopped
-    init: true
+    # 不再加 init: true —— 镜像的 ENTRYPOINT 已经是 tini，
+    # 两层叠一起会报 "Tini is not running as PID 1"
     user: "${LOGIN_UID:-1000}:${LOGIN_GID:-1000}"
     # Chromium 用 --disable-dev-shm-usage，共享内存不需要很大
     shm_size: 256mb

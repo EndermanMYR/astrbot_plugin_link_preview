@@ -59,6 +59,10 @@
     <td width="50%" align="center" valign="top"><img alt="Steam 游戏卡片，带价格、推荐数和标签" src="docs/images/card-steam.jpg" /></td>
     <td width="50%" align="center" valign="top"><img alt="浅色主题下的维基百科词条卡片" src="docs/images/card-light.jpg" /></td>
   </tr>
+  <tr>
+    <td width="50%" align="center" valign="top"><img alt="X 帖子卡片，带回复、转帖、喜欢数和三条热门评论" src="docs/images/card-x.jpg" /></td>
+    <td width="50%" align="center" valign="top"><img alt="TikTok 视频卡片，带播放量、点赞、评论、分享、收藏" src="docs/images/card-tiktok.jpg" /></td>
+  </tr>
 </table>
 
 ## 🌐 平台支持 | Platforms
@@ -72,7 +76,7 @@
 | GitHub | 仓库、Issue、PR、用户主页 | ✔ Issue/PR 评论（填 `github_token` 免限流） |
 | Bluesky | 正文、作者、配图、互动数 | ✔ 按点赞排序的回复 |
 | pixiv | 标题、作者、标签、数据（R-18 不显示图片） | ✔ |
-| Reddit | 标题、作者、版块 | ✘ 服务器访问被拦 |
+| Reddit | 标题、作者、版块 | ✘ 机房 IP 会被拦（`hot.json` 直接 403），配 `proxy` 后正常 |
 | Steam | 名称、简介、价格、类型、推荐数；填 `steam_api_key` 才有当前在线人数 | ✔ 热门评测（含推荐与否、游玩时长、赞数） |
 | 维基百科 | 词条摘要、配图 | — |
 | 维基文库 | 作品名、作者、朝代、出处、开头正文；整部书的目录页显示章节列表 | — |
@@ -226,8 +230,10 @@ X 卡片本身走公开接口，不需要登录；只有「热门评论」需要
 ```bash
 cd x-browser-service
 cp .env.example .env      # 填 Token，确认 Cookie 目录
-docker compose up -d
+docker compose up -d      # 直接拉预构建镜像，不用本地构建
 ```
+
+镜像由 GitHub Actions 构建好放在 `ghcr.io/endermanmyr/astrbot-xbrowser`，公共可拉。拉不到会自动退回本地构建（约 10 分钟，主要花在装 chromium 上）。
 
 再把地址和 Token 填进 `x_browser_url` / `x_browser_token`。不部署也不影响其他平台，只是 X 卡片没有评论。
 
