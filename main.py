@@ -332,7 +332,7 @@ class LinkPreviewPlugin(Star):
         t = str(text or "").strip()
         if not t:
             return False
-        if t[0] in "/!！":
+        if t[0] in "/!！／！":
             return True
         return t.split()[0] in COMMAND_NAMES
 
