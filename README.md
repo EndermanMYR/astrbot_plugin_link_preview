@@ -50,6 +50,7 @@
 - **翻译**：日/韩/英文帖子在卡片里**直接带译文**（`translate_auto` 默认开）；`/翻译 链接` 手动出同样一张带译文的卡，不会另外再发一条文本
 - **竖图完整显示**：多图卡片默认是网格裁切（`object-fit: cover`），检测到竖图（高/宽 > 1.25，比如手机截图）会自动改成纵向堆叠，整张显示不裁
 - **深色/浅色主题**：一张配置切换
+- **字体内嵌**：卡片自带 Noto Sans SC 子集（400/700 字重），不依赖渲染机装了什么字体，不同机器出来的粗细和字形一致
 - **平台品牌色**：每个平台用自己的品牌色（YouTube 红、Spotify 绿、Twitch 紫…），纯黑的品牌（X、GitHub、维基）在深色卡片上自动调亮，保证那条渐变和徽章看得见
 - **去重**：同一链接在同一个群里 30 秒内只预览一次
 
@@ -128,6 +129,17 @@ AstrBot/data/plugins/astrbot_plugin_link_preview
 
 > [!NOTE]
 > 唯一的差距是分辨率：现在是 800 宽（裁完约 780），原来本机渲染是 1200 宽（600 CSS px × DPR 2）。文字像素高度相同，整图略小一点。
+
+#### 字体
+
+渲染机的字体五花八门：有的没装中文字体，有的只有宋体，有的缺 DejaVu，同一张卡在不同机器上粗细、字形都不一样，深色卡片上还容易「发虚」。
+
+所以卡片**自带字体**：
+
+- `fonts/` 里是 Noto Sans SC 的 400 / 700 两个字重（GB2312 全量 + 拉丁 + 标点，共约 2MB）
+- 渲染时按这张卡实际用到的字符**再裁一次**，内联进 HTML，通常只有 10～30 KB
+- 没装 `fonttools` 时退回整份字体，效果一样，只是请求大一点
+- 顺带去掉了 `-webkit-font-smoothing: antialiased`，它会让深色卡片上的白字变细
 
 ## ⚙️ 配置 | Configuration
 
@@ -365,6 +377,7 @@ python -m unittest discover -s tests -t . -v
 ## ❤️ 致谢 | Credits
 
 - 卡片渲染基于 AstrBot 自带的文转图（`html_render`）
+- 内置字体 [Noto Sans SC](https://fonts.google.com/noto/specimen/Noto+Sans+SC)（SIL OFL 1.1，见 `fonts/OFL.txt`）
 - 抓取基于 [httpx](https://www.python-httpx.org/)，模板基于 [Jinja2](https://jinja.palletsprojects.com/)
 
 ## ⚠️ 免责声明 | Disclaimer

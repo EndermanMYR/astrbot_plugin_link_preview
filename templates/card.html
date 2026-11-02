@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <style>
+  /* 内嵌字体：不依赖渲染机装了什么字体 */
+  {{ font_css|safe }}
   :root {
     --page: #0c0b16;
     --card-a: #1d1a33;
@@ -28,8 +30,8 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: var(--page); color: var(--ink); width: 640px;
-    font-family: "Helvetica Neue", "Segoe UI", "DejaVu Sans", sans-serif, "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", "Noto Serif CJK SC", "HanaMinA", "HanaMinB", "Noto Color Emoji";
-    -webkit-font-smoothing: antialiased;
+    font-family: "LP Sans", "Helvetica Neue", "Segoe UI", "DejaVu Sans", sans-serif, "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", "Noto Color Emoji";
+   
   }
   /* 文转图模式：远端 Chromium 视口固定 800×720 且忽略 full_page/DPR，
      让卡片铺满视口宽度，避免右侧一大片空白；高度由后面的裁边处理 */

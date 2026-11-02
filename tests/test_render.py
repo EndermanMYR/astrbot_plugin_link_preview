@@ -39,14 +39,16 @@ class TestBuildHtml(unittest.TestCase):
     def test_latin_font_comes_before_cjk(self):
         """远端 Chromium 缺 Noto CJK 时会退到全角拉丁的字体，DejaVu/sans-serif 必须排在前面。"""
         html = render.build_html(CARD, "dark")
-        stack = html.split("font-family:", 1)[1].split(";", 1)[0]
+        # 取 body 那条 font-family（@font-face 里也有一处，要跳过）
+        stack = html.split('font-family: "LP Sans"', 1)[1].split(";", 1)[0]
         self.assertLess(stack.index("DejaVu Sans"), stack.index("Noto Sans CJK SC"))
         self.assertLess(stack.index("sans-serif"), stack.index("Noto Sans CJK SC"))
 
-    def test_no_local_font_face(self):
-        """不要再用 local() 取字体，远端不一定装了。"""
-        self.assertNotIn("@font-face", render.build_html(CARD, "dark"))
-        self.assertNotIn("PunctFix", render.build_html(CARD, "dark"))
+    def test_no_local_font_lookup(self):
+        """不要用 local() 取本机字体，远端不一定装了；字体是内嵌的。"""
+        html = render.build_html(CARD, "dark")
+        self.assertNotIn("local(", html)
+        self.assertNotIn("PunctFix", html)
 
     def test_card_fills_t2i_viewport(self):
         html = render.build_html(CARD, "dark")
@@ -80,6 +82,50 @@ class TestMediaLayout(unittest.TestCase):
     def test_template_without_tall(self):
         card = dict(CARD, images=["data:image/jpeg;base64,xx"], media_tall=False)
         self.assertNotIn(" stack", render.build_html(card, "dark").split("<body")[1][:2000])
+
+
+class TestEmbeddedFont(unittest.TestCase):
+    """字体要内嵌，否则不同渲染机出来的粗细、字形都不一样。"""
+
+    def test_font_files_present(self):
+        for name in ("NotoSansSC-Regular.woff2", "NotoSansSC-Bold.woff2", "OFL.txt"):
+            self.assertTrue((render.FONT_DIR / name).exists(), f"缺少 fonts/{name}")
+
+    def test_css_has_both_weights(self):
+        css = render.font_css(CARD)
+        self.assertIn("@font-face", css)
+        self.assertIn("font-weight:400", css)
+        self.assertIn("font-weight:700", css)
+        self.assertIn("data:font/woff2;base64,", css)
+
+    def test_subset_is_small(self):
+        """按字符裁剪后应该远小于整份字体。"""
+        css = render.font_css(CARD)
+        full = sum(p.stat().st_size for p, _ in render.FONTS)
+        self.assertLess(len(css), full, "子集没有比整份字体小，可能没裁")
+
+    def test_html_embeds_font_and_drops_antialiased(self):
+        html = render.build_html(CARD, "dark")
+        self.assertIn("@font-face", html)
+        self.assertIn("LP Sans", html)
+        self.assertNotIn("antialiased", html, "antialiased 会让字变细")
+
+    def test_chars_collected_from_all_fields(self):
+        card = dict(CARD, title="标题甲", text="正文乙", translation="译文丙",
+                    comments=[{"author": "丁", "text": "评论戊", "likes": "1"}])
+        chars = render._text_chars(card)
+        for ch in "标题甲正文乙译文丙丁评论戊":
+            self.assertIn(ch, chars)
+
+
+class TestArticleFont(unittest.TestCase):
+    def test_article_html_embeds_font(self):
+        article = {"title": "猫", "url": "https://zh.wikipedia.org/wiki/猫",
+                   "author": None, "image": None, "domain": "zh.wikipedia.org"}
+        blocks = [{"level": 2, "title": "概述", "text": "猫是一种哺乳动物。"}]
+        html = render.build_article_html(article, blocks, 1, 2, 0, "dark")
+        self.assertIn("@font-face", html)
+        self.assertIn("LP Sans", html)
 
 
 class TestBrandAccent(unittest.TestCase):

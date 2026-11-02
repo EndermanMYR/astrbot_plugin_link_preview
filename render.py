@@ -125,8 +125,96 @@ async def prepare_article(client, article):
 
 def build_article_html(article, blocks, no, total, hidden=0, theme="dark"):
     tpl = _env.from_string(ARTICLE.read_text(encoding="utf-8"))
+    text = " ".join(f"{(b or {}).get('title') or ''} {(b or {}).get('text') or ''}"
+                    for b in (blocks or []))
+    font_card = {"title": article.get("title"), "text": text,
+                 "author": {"name": article.get("author")}, "comments": []}
     return tpl.render(a=article, blocks=blocks, no=no, total=total, hidden=hidden,
-                      theme="light" if theme == "light" else "dark")
+                      theme="light" if theme == "light" else "dark",
+                      font_css=font_css(font_card))
+
+
+FONT_DIR = Path(__file__).parent / "fonts"
+# 只打包 400 / 700 两个字重，800、900 由浏览器合成，够用且体积可控
+FONTS = ((FONT_DIR / "NotoSansSC-Regular.woff2", 400), (FONT_DIR / "NotoSansSC-Bold.woff2", 700))
+FONT_FAMILY = "LP Sans"
+_FONT_CACHE = {}
+
+
+def _text_chars(card):
+    """收集这张卡片上会出现的所有字符，用来给字体做子集。"""
+    a = card.get("author") or {}
+    q = card.get("quote") or {}
+    parts = [
+        card.get("title"), card.get("text"), card.get("translation"), card.get("note"),
+        card.get("platform_name"), card.get("short_url"), card.get("domain"),
+        a.get("name"), a.get("handle"), q.get("author"), q.get("text"),
+        " ".join(card.get("tags") or []),
+        "".join(f"{k}{v}" for k, v in (card.get("stats") or [])),
+        "".join(f"{c.get('author') or ''}{c.get('text') or ''}{c.get('likes') or ''}{c.get('time') or ''}"
+                for c in (card.get("comments") or [])),
+    ]
+    return "".join(sorted({ch for p in parts if p for ch in str(p)}))
+
+
+def _subset_b64(path, chars):
+    """按用到的字符重新子集化字体，返回 base64。
+
+    不同渲染机装的字体不一样，同一张卡会忽粗忽细、中文变宋体。
+    把字体打进 HTML 就一致了；再按字符裁剪，体积从 700KB 降到几十 KB。
+    没装 fonttools 时退回整份字体，效果一样只是请求大一点。
+    """
+    key = (str(path), hash(chars))
+    if key in _FONT_CACHE:
+        return _FONT_CACHE[key]
+    try:
+        import io
+        import logging
+
+        from fontTools import subset
+        from fontTools.ttLib import TTFont
+
+        # fonttools 默认把每一步子集化都写成 INFO，会把 AstrBot 日志刷满
+        logging.getLogger("fontTools").setLevel(logging.WARNING)
+
+        opts = subset.Options()
+        opts.flavor = "woff2"
+        opts.desubroutinize = True
+        font = TTFont(str(path))
+        sub = subset.Subsetter(options=opts)
+        sub.populate(text=chars)
+        sub.subset(font)
+        font.flavor = "woff2"
+        buf = io.BytesIO()
+        font.save(buf)
+        data = buf.getvalue()
+    except Exception as e:                      # 没装 fonttools / 字体损坏都走这里
+        logger.debug(f"[LinkPreview] 字体子集化失败，改用整份字体：{e}")
+        try:
+            data = path.read_bytes()
+        except OSError:
+            return ""
+    b64 = base64.b64encode(data).decode()
+    if len(_FONT_CACHE) > 40:                  # 简单限容，避免缓存无限增长
+        _FONT_CACHE.clear()
+    _FONT_CACHE[key] = b64
+    return b64
+
+
+def font_css(card):
+    """生成内嵌字体的 @font-face 样式。"""
+    chars = _text_chars(card) or "A"
+    faces = []
+    for path, weight in FONTS:
+        if not path.exists():
+            continue
+        b64 = _subset_b64(path, chars)
+        if not b64:
+            continue
+        faces.append(
+            f'@font-face{{font-family:"{FONT_FAMILY}";font-style:normal;font-weight:{weight};'
+            f'font-display:block;src:url(data:font/woff2;base64,{b64}) format("woff2")}}')
+    return "".join(faces)
 
 
 def _luminance(hex_color):
@@ -162,7 +250,7 @@ def build_html(card, theme="dark", t2i=True):
     tpl = _env.from_string(TEMPLATE.read_text(encoding="utf-8"))
     theme = "light" if theme == "light" else "dark"
     c = dict(card, color=accent_for(card.get("color"), theme))
-    return tpl.render(c=c, theme=theme, t2i=t2i)
+    return tpl.render(c=c, theme=theme, t2i=t2i, font_css=font_css(card))
 
 
 # ---------------------------------------------------------------------------

@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <style>
+  /* 内嵌字体：不依赖渲染机装了什么字体 */
+  {{ font_css|safe }}
   /* 维基全文的一页，和 card.html 同一套样式 */
   :root {
     --page: #0c0b16; --card-a: #1d1a33; --card-b: #141222;
@@ -16,7 +18,7 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--page); color: var(--ink); width: 680px;
-    font-family: "Helvetica Neue", "Segoe UI", "DejaVu Sans", sans-serif, "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", "Noto Serif CJK SC", "HanaMinA", "HanaMinB", "Noto Color Emoji"; -webkit-font-smoothing: antialiased; }
+    font-family: "LP Sans", "Helvetica Neue", "Segoe UI", "DejaVu Sans", sans-serif, "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", "Noto Color Emoji"; }
   body.t2i { width: 800px; }
   body.t2i #card { margin: 20px; }
   #card { position: relative; margin: 20px; overflow: hidden; border-radius: 24px; border: 1px solid var(--line);
