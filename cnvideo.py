@@ -148,13 +148,33 @@ def _upload_date(value):
     return fmt_time(value)
 
 
+def _clean_title(info):
+    """微博有些视频把标题写成一条链接，这种改用简介首句或作者。"""
+    title = str(info.get("title") or "").strip()
+    if title and not title.lower().startswith(("http://", "https://")):
+        return title
+    desc = flatten(info.get("description")) or ""
+    if desc:
+        return desc.split(" ")[0][:80]
+    return info.get("uploader") or "微博视频"
+
+
 def card_from_info(platform, url, info):
     thumb = info.get("thumbnail")
     up = info.get("uploader") or info.get("channel") or info.get("creator")
+    title = _clean_title(info)
     desc = flatten(info.get("description")) or None
+    # 微博这类平台标题就是正文开头，别在卡片上写两遍（空白差异不算不同）
+    if desc and title:
+        a = re.sub(r"\s+", "", title)
+        b = re.sub(r"\s+", "", desc)
+        # 标题常常是正文的截断版（还带省略号），比前 12 个字就够判断了
+        head = a[:12]
+        if head and (b.startswith(head) or a.startswith(b[:12])):
+            desc = None
     return card(
         platform, url,
-        title=info.get("title"),
+        title=title,
         text=desc,
         author={"name": up, "handle": None, "avatar": None, "bio": None},
         images=[thumb] if thumb else [],
@@ -323,8 +343,10 @@ async def _bili_download(client, url, out_dir, name, max_mb, quality):
 
 async def _ytdlp_download(url, out_dir, name, max_mb, quality, timeout=300):
     target = out_dir / f"{name}.%(ext)s"
+    # 用 -S res 排序而不是 height 过滤：竖屏视频的 height 是 1464 这种，
+    # 用 height<=720 会把正常清晰度全过滤掉，只剩一张封面图
     cmd = ["yt-dlp", "--no-playlist", "--no-warnings", "--no-progress",
-           "-f", f"bv*[height<={quality}]+ba/b[height<={quality}]/b",
+           "-f", "bv*+ba/b", "-S", f"res:{quality}",
            "--merge-output-format", "mp4",
            "--max-filesize", f"{max_mb}M", "--socket-timeout", "20",
            "-o", str(target), url]
@@ -339,7 +361,8 @@ async def _ytdlp_download(url, out_dir, name, max_mb, quality, timeout=300):
         proc.kill()
         raise FetchError("下载超时") from None
 
-    files = [p for p in out_dir.glob(f"{name}.*") if p.suffix.lower() in (".mp4", ".mkv", ".webm")]
+    files = [p for p in out_dir.glob(f"{name}.*")
+             if p.suffix.lower() in (".mp4", ".mkv", ".webm", ".mov", ".flv")]
     if files:
         path = max(files, key=lambda p: p.stat().st_size)
         if path.stat().st_size > max_mb * 1024 * 1024:

@@ -249,6 +249,22 @@ class TestCnVideo(unittest.TestCase):
         self.assertEqual(cnvideo._upload_date("20260102"), "2026-01-02")
         self.assertEqual(cnvideo._upload_date(None), None)
 
+    def test_weibo_links(self):
+        for url in ("https://weibo.com/tv/show/1034:5063335004274724",
+                    "https://video.weibo.com/show?fid=1034:5356898405253160",
+                    "https://weibo.com/1234567890/AbCdEf",
+                    "https://m.weibo.cn/detail/5063335004274724"):
+            got = fetchers.find_links(url, ALL_ON, 3)
+            self.assertEqual(got and got[0][0], "weibo", url)
+
+    def test_clean_title_falls_back_when_url(self):
+        import cnvideo
+        self.assertEqual(cnvideo._clean_title({"title": "正常标题"}), "正常标题")
+        info = {"title": "https://video.weibo.com/show?fid=1",
+                "description": "关于见面会 后面还有话", "uploader": "某博主"}
+        self.assertEqual(cnvideo._clean_title(info), "关于见面会")
+        self.assertEqual(cnvideo._clean_title({"title": "", "uploader": "某博主"}), "某博主")
+
     def test_cn_links_detected(self):
         cases = {
             "https://www.bilibili.com/video/BV119Hg6aE87": "bilibili",

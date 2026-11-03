@@ -82,7 +82,8 @@ async def prepare(client, card, text_length=420, show_images=True, comments_mode
     if comments_mode:
         show_images = False
         text_length = min(text_length, 120)
-    ref = c.get("referer")
+    # 有的图床（新浪、部分 CDN）不带 Referer 直接 403，默认用原页面地址当 Referer
+    ref = c.get("referer") or c.get("url")
     avatar = (c.get("author") or {}).get("avatar")
     imgs = c.get("images") if show_images else []
     results = await asyncio.gather(

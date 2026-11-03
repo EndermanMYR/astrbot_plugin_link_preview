@@ -123,8 +123,9 @@ LINK_PATTERNS = [
     ("vqq", re.compile(r"https?://v\.qq\.com/x/(?:cover|page)/[0-9A-Za-z]+", re.I)),
     ("youku", re.compile(r"https?://(?:www\.|v\.)?youku\.com/v_show/id_[0-9A-Za-z=]+", re.I)),
     ("iqiyi", re.compile(r"https?://(?:www\.)?iqiyi\.com/v_[0-9a-z]+", re.I)),
-    ("weibo", re.compile(
-        r"https?://(?:m\.|www\.)?weibo\.(?:com|cn)/(?:\d+|[A-Za-z0-9_]+)/[0-9A-Za-z]+", re.I)),
+    ("weibo", re.compile(r"https?://(?:www\.)?weibo\.com/tv/show/[\d:a-zA-Z]+", re.I)),
+    ("weibo", re.compile(r"https?://video\.weibo\.com/show\?fid=[\d:a-zA-Z]+", re.I)),
+    ("weibo", re.compile(r"https?://(?:m\.|www\.)?weibo\.(?:com|cn)/(?:\d+|[A-Za-z0-9_]+)/[0-9A-Za-z]+", re.I)),
     ("xiaohongshu", re.compile(
         r"https?://(?:www\.)?xiaohongshu\.com/(?:explore|discovery/item)/[0-9a-z]+", re.I)),
     ("og", re.compile(
