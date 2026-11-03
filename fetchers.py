@@ -59,7 +59,21 @@ PLATFORMS = {
     "dailymotion": ("Dailymotion", "#0066dc"),
     "niconico": ("niconico", "#252525"),
     "web": ("网页", "#7c5cff"),
+    # 国内视频平台
+    "bilibili": ("哔哩哔哩", "#fb7299"),
+    "douyin": ("抖音", "#000000"),
+    "kuaishou": ("快手", "#ff4906"),
+    "ixigua": ("西瓜视频", "#ff5a1f"),
+    "vqq": ("腾讯视频", "#00a4ff"),
+    "youku": ("优酷", "#1ba5e0"),
+    "iqiyi": ("爱奇艺", "#00be06"),
+    "weibo": ("微博", "#e6162d"),
+    "xiaohongshu": ("小红书", "#ff2442"),
 }
+
+# 走 cnvideo 模块的国内视频平台（B 站官方接口，其余 yt-dlp）
+CN_VIDEO = frozenset({"bilibili", "douyin", "kuaishou", "ixigua", "vqq", "youku", "iqiyi",
+                      "weibo", "xiaohongshu"})
 
 # 只取元信息（OpenGraph）的站点：域名 -> 平台 key
 OG_SITES = {
@@ -97,6 +111,22 @@ LINK_PATTERNS = [
     ("spotify", re.compile(r"https?://open\.spotify\.com/(?:intl-[a-z-]+/)?(?:track|album|playlist|artist|episode|show)/[A-Za-z0-9]+[^\s<>\"']*", re.I)),
     ("vimeo", re.compile(r"https?://(?:www\.)?vimeo\.com/\d+[^\s<>\"']*", re.I)),
     ("soundcloud", re.compile(r"https?://(?:www\.|m\.)?soundcloud\.com/[^\s/<>\"']+/[^\s<>\"']+", re.I)),
+    # 国内视频平台：放在 og / web 兜底之前，否则会被当成普通网页
+    ("bilibili", re.compile(
+        r"https?://(?:www\.|m\.)?bilibili\.com/video/(BV[0-9A-Za-z]{10}|av\d+)", re.I)),
+    ("bilibili", re.compile(r"https?://b23\.tv/[0-9A-Za-z]+", re.I)),
+    ("douyin", re.compile(r"https?://(?:www\.)?douyin\.com/video/\d+", re.I)),
+    ("douyin", re.compile(r"https?://v\.douyin\.com/[0-9A-Za-z_-]+", re.I)),
+    ("kuaishou", re.compile(
+        r"https?://(?:www\.|v\.)?kuaishou\.com/(?:short-video|f)/[0-9A-Za-z_-]+", re.I)),
+    ("ixigua", re.compile(r"https?://(?:www\.)?ixigua\.com/\d+", re.I)),
+    ("vqq", re.compile(r"https?://v\.qq\.com/x/(?:cover|page)/[0-9A-Za-z]+", re.I)),
+    ("youku", re.compile(r"https?://(?:www\.|v\.)?youku\.com/v_show/id_[0-9A-Za-z=]+", re.I)),
+    ("iqiyi", re.compile(r"https?://(?:www\.)?iqiyi\.com/v_[0-9a-z]+", re.I)),
+    ("weibo", re.compile(
+        r"https?://(?:m\.|www\.)?weibo\.(?:com|cn)/(?:\d+|[A-Za-z0-9_]+)/[0-9A-Za-z]+", re.I)),
+    ("xiaohongshu", re.compile(
+        r"https?://(?:www\.)?xiaohongshu\.com/(?:explore|discovery/item)/[0-9a-z]+", re.I)),
     ("og", re.compile(
         r"https?://(?:www\.|m\.)?(?:threads\.(?:net|com)|twitch\.tv|facebook\.com|fb\.watch)/[^\s<>\"']+", re.I)),
     # 兜底：剩下的任何 http(s) 链接都按通用网页抓 OpenGraph
@@ -1746,6 +1776,9 @@ async def fetch(client, platform, url, github_token=None, comments=0, steam_api_
         return await fetch_twitch(client, url)
     if platform in OEMBED:
         return await fetch_oembed(client, platform, url)
+    if platform in CN_VIDEO:
+        from . import cnvideo      # 延迟导入，避免和本模块循环依赖
+        return await cnvideo.fetch(client, platform, url)
     return await fetch_og(client, platform, url)
 
 

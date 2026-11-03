@@ -18,6 +18,8 @@ ICONS = {
     "steam": "S", "wikipedia": "W", "wikisource": "文", "tiktok": "♪", "spotify": "♫", "vimeo": "V",
     "soundcloud": "S", "instagram": "I", "threads": "@", "twitch": "T", "facebook": "f", "web": "↗",
     "dailymotion": "d", "niconico": "N",
+    "bilibili": "B", "douyin": "抖", "kuaishou": "快", "ixigua": "西", "vqq": "腾",
+    "youku": "优", "iqiyi": "爱", "weibo": "微", "xiaohongshu": "书",
 }
 
 _env = jinja2.Environment(autoescape=True)

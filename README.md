@@ -38,6 +38,7 @@
 
 - **自动识别**：群消息里出现链接就自动出卡片，不需要 @ 或指令
 - **19 个平台**：YouTube、TikTok、Instagram、X、GitHub、Bluesky、pixiv、Steam、Reddit、维基百科、维基文库、Dailymotion、niconico、Spotify、Vimeo、SoundCloud、Threads、Twitch、Facebook
+- **国内视频平台**：B 站（含 `b23.tv` 短链）、抖音、快手、西瓜视频、腾讯视频、优酷、爱奇艺、微博、小红书，卡片带封面、UP 主、播放/弹幕/点赞，`/下载视频` 直接把视频发到群里
 - **任意网站**：不在上面这些平台的链接也会按页面 OpenGraph 出一张卡（站名、域名、标题、摘要、封面、favicon），内网地址和直链文件自动跳过
 - **不用写 http://**：`www.bilibili.com`、`github.com/o/r`、`人民网.中国` 这种裸域名也能认出来；中文域名夹在中文句子里时分不清边界，这种情况不认
 - **热门评论**：YouTube、TikTok、X、Instagram、GitHub Issue/PR、Bluesky、pixiv、Steam 的卡片会附带几条高赞评论
@@ -91,6 +92,8 @@
 | Spotify / Vimeo / SoundCloud | 标题、作者、封面 | — |
 | Twitch | 频道资料、是否在播、直播标题、观众数、分类、16:9 预览图；切片也行（走公开 GQL，不受登录墙影响） | — |
 | Threads / Facebook | 页面元信息（要登录的页面不发） | — |
+| 哔哩哔哩 | 标题、UP 主、封面、时长、播放/弹幕/点赞/收藏、发布时间；`b23.tv` 短链自动展开 | — |
+| 抖音 / 快手 / 西瓜视频 / 腾讯视频 / 优酷 / 爱奇艺 / 微博 / 小红书 | 标题、作者、封面、时长、播放/点赞/评论（走 yt-dlp） | — |
 | 其他网站 | 页面 OpenGraph：站名、域名、标题、摘要、封面、favicon、发布时间 | — |
 
 「其他网站」默认开着：没被上面任何平台匹配到的链接，自动按普通网页抓 OpenGraph。不想要就在配置里关掉 `platforms.web`，或把域名填进 `web_blocklist`。
@@ -174,6 +177,10 @@ AstrBot WebUI -> 插件 -> 插件配置
 | `max_links_per_message` | 一条消息最多预览几个链接，默认 `2` |
 | `web_blocklist` | 不预览的域名，填 `bilibili.com` 会连 `live.bilibili.com` 一起跳过 |
 | `extra_tlds` | 补充识别的顶级域，内置列表里没有的填这里（`zip`、`mov`、`测试`），不用带点 |
+| `download_enabled` | 允许 `/下载视频`，默认开 |
+| `download_max_mb` | 下载大小上限，默认 `80` MB |
+| `download_quality` | 清晰度上限，默认 `720`；1080 多数站点要大会员，拿不到会自动降级 |
+| `download_timeout` | 下载超时，默认 `240` 秒 |
 | `dedupe_seconds` | 同一链接在同一个群里多久内不重复预览，默认 `30` |
 | `private_enabled` | 私聊里也自动识别，默认关 |
 | `group_whitelist` / `group_blacklist` | 只在这些群 / 不在这些群自动识别 |
@@ -287,6 +294,7 @@ docker compose up -d      # 本地构建，约 10 分钟（主要花在装 chrom
 | `/预览 链接` | `/preview` | 手动预览任意网页，不受平台开关限制 |
 | `/评论 [链接]` | `/comments`、`/看评论` | 单独看评论（最多 10 条），不带链接时用本群最近预览的那条 |
 | `/翻译 [链接]` | `/translate`、`/翻译帖子` | 出一张带译文的卡片（外语帖子自动预览时已带译文，一般不用再发） |
+| `/下载视频 [链接]` | `/dlvideo`、`/视频下载` | 下载国内平台的视频并发到群里（默认 720P、80MB 上限） |
 | `/全文 [维基链接]` | `/fulltext`、`/维基全文` | 维基百科词条或维基文库作品全文，分页后合并转发 |
 | `/预览图片 [开/关/默认]` | `/previewimg`、`/预览配图` | 管理员切换本群卡片是否显示配图和封面 |
 | `/预览帮助` | `/previewhelp` | 查看帮助 |
@@ -380,7 +388,7 @@ asyncio.run(main())
 python -m unittest discover -s tests -t . -v
 ```
 
-覆盖的是容易悄悄坏掉的部分：链接识别（19 个平台 + 任意网页兜底、裸域名与中文域名、内网与直链过滤）、数字/时长/时间格式化、OpenGraph 解析、全文分页、词表匹配（含插字写法）、配置项与抓取器是否对齐、发布包是否缺文件、模板字体栈顺序、裁边逻辑。CI 在 `.github/workflows/ci.yml`，推 main 就跑。
+覆盖的是容易悄悄坏掉的部分：链接识别（19 个国外平台 + 9 个国内视频平台 + 任意网页兜底、裸域名与中文域名、内网与直链过滤）、数字/时长/时间格式化、OpenGraph 解析、全文分页、词表匹配（含插字写法）、配置项与抓取器是否对齐、发布包是否缺文件、模板字体栈顺序、裁边逻辑。CI 在 `.github/workflows/ci.yml`，推 main 就跑。
 
 ## ❤️ 致谢 | Credits
 

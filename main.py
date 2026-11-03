@@ -16,13 +16,14 @@ from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star, StarTools
 
-from . import fetchers, render, wordfilter
+from . import cnvideo, fetchers, render, wordfilter
 
 HELP = """外链预览
 群里发 YouTube / TikTok / Instagram / X / GitHub / Reddit / Bluesky / pixiv / Steam / 维基百科 / 维基文库 / Dailymotion / niconico / Spotify 等链接，会自动回一张预览卡片（带几条热门评论）。
 /预览 链接：手动预览任意网页链接（也可用 /preview）
 /评论 [链接]：单独看一条链接的评论，最多 10 条；不带链接时用本群最近预览过的那条（也可用 /comments）
 /翻译 [链接]：出一张带译文的卡片（外语帖子自动预览时已带译文，不用再发这条）
+/下载视频 [链接]：把 B 站 / 抖音 / 快手 / 西瓜 / 腾讯视频 / 优酷 / 爱奇艺 / 微博 / 小红书的视频下载后发出来（也可用 /dlvideo）
 /全文 [维基链接]：把维基百科词条或维基文库作品的全文分页，合并转发发出（也可用 /维基全文）
 /预览图片 [开/关/默认]：管理员切换本群卡片是否显示配图和封面，不带参数查看当前状态
 /预览帮助：查看这条帮助
@@ -34,6 +35,7 @@ COMMAND_NAMES = {
     "预览", "preview", "评论", "comments", "看评论",
     "全文", "fulltext", "维基全文", "预览图片", "previewimg", "预览配图",
     "预览帮助", "previewhelp", "翻译", "translate", "翻译帖子",
+    "下载视频", "dlvideo", "视频下载", "下视频",
 }
 # 词表默认放在插件数据目录（data/plugin_data/<插件名>/）下，随插件数据一起迁移和审计。
 WORDS_NAME = "political.txt"
@@ -434,6 +436,27 @@ class LinkPreviewPlugin(Star):
                 "theme": "light" if theme == "light" else "dark", "t2i": True}
         return await self._t2i(render.ARTICLE, data, out)
 
+    async def _download_video(self, platform, url):
+        """下载国内平台视频，返回本地 mp4 路径。"""
+        max_mb = _int(self.config.get("download_max_mb", 80), 80, 1, 500)
+        quality = _int(self.config.get("download_quality", 720), 720, 144, 1080)
+        timeout = _int(self.config.get("download_timeout", 240), 240, 30, 900)
+        async with fetchers.make_client(self.config.get("proxy") or None, 20) as client:
+            return await asyncio.wait_for(
+                cnvideo.download(client, platform, url, self.data_dir / "videos", max_mb, quality),
+                timeout,
+            )
+
+    def _clean_videos(self, keep=1800):
+        """清掉半小时前的下载文件，别把磁盘占满。"""
+        cutoff = time.time() - keep
+        try:
+            for f in (self.data_dir / "videos").iterdir():
+                if f.is_file() and f.stat().st_mtime < cutoff:
+                    f.unlink()
+        except OSError:
+            pass
+
     async def _make_card_image(self, platform, url, comments_mode=False, session=None, translate=False):
         """抓取 + 渲染，返回图片路径；失败返回 None。"""
         n_comments = 10 if comments_mode else _int(self.config.get("comment_count", 3), 3, 0, 10)
@@ -661,6 +684,50 @@ class LinkPreviewPlugin(Star):
 
         async for res in self._preview(event, links[:1], quiet=False, translate=True):
             yield res
+
+    @filter.command("下载视频", alias={"dlvideo", "视频下载", "下视频"})
+    async def download_video_cmd(self, event: AstrMessageEvent):
+        """下载国内平台的视频，直接发到群里。"""
+        if not _bool(self.config.get("download_enabled", True), True):
+            yield event.plain_result("视频下载功能已关闭（配置项 download_enabled）")
+            return
+        links = self._links_from_command(event)
+        if not links:
+            last = self._last_link.get(event.unified_msg_origin)
+            if last:
+                links = [last]
+        if not links:
+            yield event.plain_result("用法：/下载视频 链接（也可以先发一次链接，再发 /下载视频）")
+            return
+
+        platform, url = links[0]
+        if platform not in cnvideo.SUPPORTED:
+            yield event.plain_result(
+                "这个链接不支持下载。目前支持：B 站（含 b23.tv 短链）、抖音、快手、西瓜、"
+                "腾讯视频、优酷、爱奇艺、微博、小红书")
+            return
+
+        yield event.plain_result("正在下载视频，稍等…")
+        try:
+            path = await self._download_video(platform, url)
+        except asyncio.TimeoutError:
+            yield event.plain_result("下载超时了，换短一点的视频试试")
+            return
+        except Exception as e:  # noqa: BLE001 - 各种失败都只影响这一条消息
+            logger.warning(f"[LinkPreview] 下载失败 {url}：{e}")
+            yield event.plain_result(f"下载失败：{e}")
+            return
+        finally:
+            self._clean_videos()
+
+        size_mb = path.stat().st_size / 1024 / 1024
+        ok = await self._send_or_notice(event, [Comp.Video.fromFileSystem(str(path))])
+        if not ok:
+            # 视频发不出去（格式或大小被拦）就退成文件
+            ok = await self._send_or_notice(
+                event, [Comp.File(name=path.name, file=f"file://{path}")])
+        if not ok:
+            yield event.plain_result(f"下载好了（{size_mb:.1f} MB）但发不出去，可能超过群文件上限")
 
     @filter.command("全文", alias={"fulltext", "维基全文"})
     async def fulltext_cmd(self, event: AstrMessageEvent):

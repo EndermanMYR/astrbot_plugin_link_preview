@@ -110,6 +110,51 @@
                 "type": "bool",
                 "default": true,
                 "hint": "没被上面任何平台匹配到的链接，按页面 OpenGraph 出一张卡。内网地址和直链文件会自动跳过"
+            },
+            "bilibili": {
+                "description": "哔哩哔哩（含 b23.tv 短链）",
+                "type": "bool",
+                "default": true
+            },
+            "douyin": {
+                "description": "抖音",
+                "type": "bool",
+                "default": true
+            },
+            "kuaishou": {
+                "description": "快手",
+                "type": "bool",
+                "default": true
+            },
+            "ixigua": {
+                "description": "西瓜视频",
+                "type": "bool",
+                "default": true
+            },
+            "vqq": {
+                "description": "腾讯视频",
+                "type": "bool",
+                "default": true
+            },
+            "youku": {
+                "description": "优酷",
+                "type": "bool",
+                "default": true
+            },
+            "iqiyi": {
+                "description": "爱奇艺",
+                "type": "bool",
+                "default": true
+            },
+            "weibo": {
+                "description": "微博",
+                "type": "bool",
+                "default": true
+            },
+            "xiaohongshu": {
+                "description": "小红书",
+                "type": "bool",
+                "default": true
             }
         }
     },
@@ -177,6 +222,30 @@
         "type": "list",
         "default": [],
         "hint": "内置了常见顶级域（com、cn、中国、公司…）。遇到认不出来的就填这里，例如 zip、mov、测试；不用带点"
+    },
+    "download_enabled": {
+        "description": "允许 /下载视频",
+        "type": "bool",
+        "default": true,
+        "hint": "关掉之后 /下载视频 会回一句「功能已关闭」"
+    },
+    "download_max_mb": {
+        "description": "下载大小上限（MB）",
+        "type": "int",
+        "default": 80,
+        "hint": "超过这个大小就放弃，避免把磁盘和群文件塞满；QQ 群视频一般 100MB 以内"
+    },
+    "download_quality": {
+        "description": "下载清晰度上限",
+        "type": "int",
+        "default": 720,
+        "hint": "720 一般不需要登录；1080 多数站点要大会员，拿不到会自动降级"
+    },
+    "download_timeout": {
+        "description": "下载超时（秒）",
+        "type": "int",
+        "default": 240,
+        "hint": "长视频下载慢，可以调大；超时会回一句提示"
     },
     "dedupe_seconds": {
         "description": "同一链接在同一个群里多久内不重复预览（秒）",

@@ -207,6 +207,66 @@ class TestBareUrls(unittest.TestCase):
                          ["https://a.com/1", "https://b.com/2"])
 
 
+class TestCnVideo(unittest.TestCase):
+    """国内视频平台：链接解析、卡片字段、平台表一致性。"""
+
+    def test_bili_target(self):
+        import cnvideo
+        self.assertEqual(cnvideo.bili_target("https://www.bilibili.com/video/BV119Hg6aE87"),
+                         ("BV119Hg6aE87", 1))
+        self.assertEqual(cnvideo.bili_target("https://m.bilibili.com/video/av12345"),
+                         ("av12345", 1))
+        self.assertEqual(cnvideo.bili_target("https://www.bilibili.com/video/BV119Hg6aE87?p=3"),
+                         ("BV119Hg6aE87", 3))
+        self.assertEqual(cnvideo.bili_target("https://b23.tv/iVrYSRK"), (None, 1))
+
+    def test_platform_tables_match(self):
+        import cnvideo
+        self.assertEqual(set(cnvideo.SUPPORTED), set(fetchers.CN_VIDEO))
+        for key in cnvideo.SUPPORTED:
+            self.assertIn(key, fetchers.PLATFORMS, f"{key} 没在 PLATFORMS 里")
+
+    def test_card_from_info(self):
+        import cnvideo
+        info = {
+            "title": "测试视频", "uploader": "某UP", "duration": 93,
+            "view_count": 12345, "like_count": 678, "comment_count": 9,
+            "thumbnail": "https://example.com/t.jpg", "upload_date": "20260102",
+            "description": "简介第一行\n第二行", "tags": ["a", "b", "c", "d"],
+        }
+        c = cnvideo.card_from_info("douyin", "https://v.douyin.com/x", info)
+        self.assertEqual(c["title"], "测试视频")
+        self.assertEqual(c["author"]["name"], "某UP")
+        self.assertEqual(c["images"], ["https://example.com/t.jpg"])
+        self.assertEqual(c["duration"], "1:33")
+        self.assertEqual(c["time"], "2026-01-02")
+        self.assertEqual(c["stats"][0], ["播放", "1.2万"])
+        self.assertEqual(len(c["tags"]), 3)
+        self.assertTrue(c["video"])
+
+    def test_upload_date_passthrough(self):
+        import cnvideo
+        self.assertEqual(cnvideo._upload_date("20260102"), "2026-01-02")
+        self.assertEqual(cnvideo._upload_date(None), None)
+
+    def test_cn_links_detected(self):
+        cases = {
+            "https://www.bilibili.com/video/BV119Hg6aE87": "bilibili",
+            "https://b23.tv/iVrYSRK": "bilibili",
+            "https://v.douyin.com/abc123": "douyin",
+            "https://www.douyin.com/video/7300000000000000000": "douyin",
+            "https://www.kuaishou.com/short-video/3xabc": "kuaishou",
+            "https://www.ixigua.com/7300000000000000000": "ixigua",
+            "https://v.qq.com/x/cover/mzc00200zsqz54y": "vqq",
+            "https://v.youku.com/v_show/id_XNTk=": "youku",
+            "https://www.iqiyi.com/v_abc123": "iqiyi",
+            "https://www.xiaohongshu.com/explore/abc123": "xiaohongshu",
+        }
+        for url, want in cases.items():
+            got = fetchers.find_links(url, ALL_ON, 3)
+            self.assertEqual(got and got[0][0], want, url)
+
+
 class TestCleanSite(unittest.TestCase):
     """og:site_name 常带整句标题，要压成短站名。"""
 
