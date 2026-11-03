@@ -28,6 +28,22 @@ SUPPORTED = {
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 BILI_HEADERS = {"User-Agent": UA, "Referer": "https://www.bilibili.com/"}
+
+
+async def _communicate(proc, timeout, timeout_msg):
+    """等子进程结束；超时或外层任务被取消（/下载视频 的总超时）时都把进程杀掉。
+
+    只在自己的 TimeoutError 分支里 kill 不够：外层 wait_for 先到点时这里收到的是
+    CancelledError，不处理的话 yt-dlp / ffmpeg 会一直在后台跑。
+    """
+    try:
+        return await asyncio.wait_for(proc.communicate(), timeout)
+    except asyncio.TimeoutError:
+        raise FetchError(timeout_msg) from None
+    finally:
+        if proc.returncode is None:
+            proc.kill()
+            await proc.wait()
 BILI_API = "https://api.bilibili.com"
 
 BILI_RE = re.compile(r"bilibili\.com/video/(BV[0-9A-Za-z]{10}|av\d+)", re.I)
@@ -127,11 +143,7 @@ async def ytdlp_info(url, timeout=45):
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     except FileNotFoundError:
         raise FetchError("服务器上没装 yt-dlp") from None
-    try:
-        out, err = await asyncio.wait_for(proc.communicate(), timeout)
-    except asyncio.TimeoutError:
-        proc.kill()
-        raise FetchError("解析超时") from None
+    out, err = await _communicate(proc, timeout, "解析超时")
     if proc.returncode != 0 or not out:
         lines = [x for x in (err or b"").decode("utf-8", "ignore").splitlines() if x.strip()]
         raise FetchError(lines[-1][:80] if lines else "yt-dlp 解析失败")
@@ -254,11 +266,7 @@ async def _ffmpeg_merge(video, audio, out, timeout=180):
            "-c", "copy", "-movflags", "+faststart", str(out)]
     proc = await asyncio.create_subprocess_exec(
         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    try:
-        _, err = await asyncio.wait_for(proc.communicate(), timeout)
-    except asyncio.TimeoutError:
-        proc.kill()
-        raise FetchError("音视频合并超时") from None
+    _, err = await _communicate(proc, timeout, "音视频合并超时")
     if proc.returncode != 0 or not out.exists():
         msg = (err or b"").decode("utf-8", "ignore").strip().splitlines()
         raise FetchError("音视频合并失败" + (f"：{msg[-1][:60]}" if msg else ""))
@@ -270,11 +278,7 @@ async def _ffmpeg_copy(src, out, timeout=180):
            "-c", "copy", "-movflags", "+faststart", str(out)]
     proc = await asyncio.create_subprocess_exec(
         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    try:
-        await asyncio.wait_for(proc.communicate(), timeout)
-    except asyncio.TimeoutError:
-        proc.kill()
-        raise FetchError("转码超时") from None
+    await _communicate(proc, timeout, "转码超时")
     if proc.returncode != 0 or not out.exists():
         raise FetchError("转码失败")
 
@@ -355,11 +359,7 @@ async def _ytdlp_download(url, out_dir, name, max_mb, quality, timeout=300):
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     except FileNotFoundError:
         raise FetchError("服务器上没装 yt-dlp") from None
-    try:
-        _, err = await asyncio.wait_for(proc.communicate(), timeout)
-    except asyncio.TimeoutError:
-        proc.kill()
-        raise FetchError("下载超时") from None
+    _, err = await _communicate(proc, timeout, "下载超时")
 
     files = [p for p in out_dir.glob(f"{name}.*")
              if p.suffix.lower() in (".mp4", ".mkv", ".webm", ".mov", ".flv")]

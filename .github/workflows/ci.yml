@@ -28,7 +28,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: 语法检查
-        run: python -m py_compile main.py fetchers.py render.py wordfilter.py x-browser-service/scraper.py
+        run: python -m py_compile main.py fetchers.py render.py wordfilter.py cnvideo.py x-browser-service/scraper.py
 
       - name: 单元测试
         run: python -m unittest discover -s tests -t . -v

@@ -584,5 +584,95 @@ class TestTextCleaning(unittest.TestCase):
         self.assertIn("正文", out)
 
 
+class TestPrivateGuard(unittest.TestCase):
+    """真正发请求前按解析结果拦内网，重定向的每一跳也要查。"""
+
+    def setUp(self):
+        self._orig = fetchers._resolve
+        table = {"example.com": ["93.184.215.14"], "evil.example": ["127.0.0.1"],
+                 "127.0.0.1.nip.io": ["127.0.0.1"], "fake.example": ["198.18.0.7"],
+                 "v6.example": ["::ffff:10.0.0.1"]}
+
+        async def resolve(host, port):
+            return table.get(host, ["93.184.215.14"])
+        fetchers._resolve = resolve
+
+    def tearDown(self):
+        fetchers._resolve = self._orig
+
+    def _get(self, url, handler):
+        async def go():
+            import httpx
+            async with fetchers.make_client(transport=httpx.MockTransport(handler)) as c:
+                return await c.get(url)
+        return asyncio.run(go())
+
+    def test_blocked_ip(self):
+        for ip in ("127.0.0.1", "10.1.2.3", "172.17.0.1", "192.168.1.1", "169.254.169.254",
+                   "100.64.0.1", "0.0.0.0", "::1", "fe80::1%en0", "::ffff:127.0.0.1", "224.0.0.1", "bad"):
+            self.assertTrue(fetchers._blocked_ip(ip), ip)
+        for ip in ("93.184.215.14", "1.1.1.1", "2606:4700::1111", "198.18.0.7"):
+            self.assertFalse(fetchers._blocked_ip(ip), ip)
+
+    def test_public_ok(self):
+        import httpx
+        r = self._get("https://example.com/", lambda req: httpx.Response(200, text="ok"))
+        self.assertEqual(r.text, "ok")
+
+    def test_fake_ip_ok(self):
+        import httpx
+        r = self._get("https://fake.example/", lambda req: httpx.Response(200, text="ok"))
+        self.assertEqual(r.text, "ok")
+
+    def test_domain_resolving_to_loopback(self):
+        import httpx
+        for url in ("http://127.0.0.1.nip.io:6185/", "http://v6.example/"):
+            with self.assertRaises(fetchers.FetchError):
+                self._get(url, lambda req: httpx.Response(200, text="leak"))
+
+    def test_redirect_to_internal(self):
+        import httpx
+        hits = []
+
+        def handler(req):
+            hits.append(req.url.host)
+            if req.url.host == "example.com":
+                return httpx.Response(302, headers={"Location": "http://evil.example:6185/"})
+            return httpx.Response(200, text="leak")
+        with self.assertRaises(fetchers.FetchError):
+            self._get("https://example.com/", handler)
+        self.assertEqual(hits, ["example.com"])
+
+
+class TestSubprocessCleanup(unittest.TestCase):
+    """外层总超时取消任务时，子进程也要被杀掉，不能留在后台。"""
+
+    def test_cancel_kills_process(self):
+        import cnvideo
+        holder = {}
+
+        async def go():
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-c", "import time; time.sleep(30)",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            holder["proc"] = proc
+            with self.assertRaises(asyncio.TimeoutError):
+                await asyncio.wait_for(cnvideo._communicate(proc, 60, "x"), 0.3)
+            return proc.returncode
+        self.assertIsNotNone(asyncio.run(go()))
+
+    def test_own_timeout(self):
+        import cnvideo
+
+        async def go():
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-c", "import time; time.sleep(30)",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            with self.assertRaises(fetchers.FetchError):
+                await cnvideo._communicate(proc, 0.3, "超时")
+            return proc.returncode
+        self.assertIsNotNone(asyncio.run(go()))
+
+
 if __name__ == "__main__":
     unittest.main()

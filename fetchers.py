@@ -15,8 +15,10 @@
 
 import asyncio
 import html as htmllib
+import ipaddress
 import json
 import re
+import socket
 from functools import lru_cache
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, quote, unquote, urlencode, urljoin, urlsplit, urlunsplit
@@ -1783,8 +1785,48 @@ async def fetch(client, platform, url, github_token=None, comments=0, steam_api_
     return await fetch_og(client, platform, url)
 
 
-def make_client(proxy=None, timeout=12):
+# Clash / Surge 的 fake-ip 模式会把所有域名解析到这一段，属于测试网段而不是内网，放行
+_FAKE_IP_NET = ipaddress.ip_network("198.18.0.0/15")
+
+
+def _blocked_ip(ip):
+    """解析出的地址是不是本机/内网/保留地址。"""
+    try:
+        addr = ipaddress.ip_address(str(ip).split("%")[0])
+    except ValueError:
+        return True
+    if addr.version == 6 and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    if addr.version == 4 and addr in _FAKE_IP_NET:
+        return False
+    return not addr.is_global or addr.is_multicast
+
+
+async def _resolve(host, port):
+    infos = await asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    return [sa[0] for *_, sa in infos]
+
+
+async def _guard_request(request):
+    """每个请求（包括重定向的每一跳）发出前看目标解析到哪：是内网就拒绝。
+
+    只按域名字符串判断挡不住 127.0.0.1.nip.io、0177.0.0.1 这类写法，
+    也挡不住公网页面 302 到内网，所以要在真正连接前按解析结果再查一遍。
+    """
+    host = request.url.host
+    if not host:
+        return
+    try:
+        addrs = await _resolve(host, request.url.port or (443 if request.url.scheme == "https" else 80))
+    except (OSError, UnicodeError):
+        return                      # 解析不了交给 httpx 自己报错
+    if any(_blocked_ip(a) for a in addrs):
+        raise FetchError("目标是内网地址，已拒绝访问")
+
+
+def make_client(proxy=None, timeout=12, transport=None):
     return httpx.AsyncClient(
         headers={"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8"},
-        follow_redirects=True, timeout=timeout, proxy=proxy or None,
+        follow_redirects=True, timeout=timeout, proxy=proxy or None, transport=transport,
+        event_hooks={"request": [_guard_request]},
     )
