@@ -429,11 +429,10 @@ class LinkPreviewPlugin(Star):
 
     async def _render_html(self, tmpl_path, card, out):
         theme = "light" if self.config.get("theme") == "light" else "dark"
-        return await self._t2i(tmpl_path, {"c": card, "theme": theme, "t2i": True}, out)
+        return await self._t2i(tmpl_path, render.card_data(card, theme), out)
 
     async def _render_page(self, article, blocks, no, total, hidden, theme, out):
-        data = {"a": article, "blocks": blocks, "no": no, "total": total, "hidden": hidden,
-                "theme": "light" if theme == "light" else "dark", "t2i": True}
+        data = render.article_data(article, blocks, no, total, hidden, theme)
         return await self._t2i(render.ARTICLE, data, out)
 
     async def _download_video(self, platform, url):

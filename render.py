@@ -127,15 +127,35 @@ async def prepare_article(client, article):
     return a
 
 
-def build_article_html(article, blocks, no, total, hidden=0, theme="dark"):
-    tpl = _env.from_string(ARTICLE.read_text(encoding="utf-8"))
+def article_data(article, blocks, no, total, hidden=0, theme="dark", t2i=True):
+    """全文一页的模板变量；本地预览和文转图共用，保证两边出图一样。"""
     text = " ".join(f"{(b or {}).get('title') or ''} {(b or {}).get('text') or ''}"
                     for b in (blocks or []))
     font_card = {"title": article.get("title"), "text": text,
                  "author": {"name": article.get("author")}, "comments": []}
-    return tpl.render(a=article, blocks=blocks, no=no, total=total, hidden=hidden,
-                      theme="light" if theme == "light" else "dark",
-                      font_css=font_css(font_card))
+    return {"a": article, "blocks": blocks, "no": no, "total": total, "hidden": hidden,
+            "theme": "light" if theme == "light" else "dark", "t2i": t2i,
+            "font_css": font_css(font_card), "mascot": mascot_uri()}
+
+
+def build_article_html(article, blocks, no, total, hidden=0, theme="dark"):
+    tpl = _env.from_string(ARTICLE.read_text(encoding="utf-8"))
+    return tpl.render(**article_data(article, blocks, no, total, hidden, theme, t2i=False))
+
+
+# 卡片顶上探出头的看板娘：已抠好透明底、只留到胸口（下面被卡片挡住），12KB 左右
+MASCOT = Path(__file__).parent / "templates" / "mascot.webp"
+_MASCOT_URI = []
+
+
+def mascot_uri():
+    """看板娘的 data URI；文件不在就返回空串，模板里会整块不画。"""
+    if not _MASCOT_URI:
+        try:
+            _MASCOT_URI.append("data:image/webp;base64," + base64.b64encode(MASCOT.read_bytes()).decode())
+        except OSError:
+            _MASCOT_URI.append("")
+    return _MASCOT_URI[0]
 
 
 FONT_DIR = Path(__file__).parent / "fonts"
@@ -249,12 +269,21 @@ def accent_for(color, theme="dark"):
     return "#%02x%02x%02x" % tuple(rgb)
 
 
+def card_data(card, theme="dark", t2i=True):
+    """卡片的模板变量：调过对比度的品牌色、内嵌字体、看板娘图。
+
+    文转图服务拿到的是模板原文 + 这份变量，在远端渲染；本地 build_html 也用它，
+    这样字体和配色在两条路径上都生效。
+    """
+    theme = "light" if theme == "light" else "dark"
+    c = dict(card, color=accent_for(card.get("color"), theme))
+    return {"c": c, "theme": theme, "t2i": t2i, "font_css": font_css(card), "mascot": mascot_uri()}
+
+
 def build_html(card, theme="dark", t2i=True):
     """渲染成 HTML 字符串。t2i=True 时套用文转图的版式（铺满 800 宽视口）。"""
     tpl = _env.from_string(TEMPLATE.read_text(encoding="utf-8"))
-    theme = "light" if theme == "light" else "dark"
-    c = dict(card, color=accent_for(card.get("color"), theme))
-    return tpl.render(c=c, theme=theme, t2i=t2i, font_css=font_css(card))
+    return tpl.render(**card_data(card, theme, t2i))
 
 
 # ---------------------------------------------------------------------------

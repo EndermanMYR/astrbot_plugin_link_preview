@@ -226,5 +226,44 @@ class TestCropImage(unittest.TestCase):
         self.assertEqual(render.crop_image("/tmp/definitely-not-here.jpg"), "/tmp/definitely-not-here.jpg")
 
 
+class TestMascot(unittest.TestCase):
+    """看板娘：线上文转图和本地预览拿到同一份变量；图缺失时整块不画。"""
+
+    def test_card_data_has_font_and_mascot(self):
+        d = render.card_data(CARD, "dark")
+        self.assertTrue(d["mascot"].startswith("data:image/webp;base64,"))
+        self.assertIn("@font-face", d["font_css"])
+        self.assertEqual(d["c"]["color"], render.accent_for("#000000", "dark"))
+        self.assertTrue(d["t2i"])
+
+    def test_article_data_has_mascot(self):
+        d = render.article_data({"title": "t", "url": "https://zh.wikipedia.org/wiki/t"},
+                                [{"title": "a", "level": 2, "text": "b"}], 1, 2)
+        self.assertTrue(d["mascot"])
+        self.assertIn("@font-face", d["font_css"])
+
+    def test_mascot_drawn(self):
+        html = render.build_html(CARD, "dark")
+        self.assertIn('class="neko"', html)
+        self.assertIn('class="stage has-neko"', html)
+
+    def test_no_mascot_file(self):
+        old = render._MASCOT_URI[:]
+        render._MASCOT_URI[:] = [""]
+        try:
+            html = render.build_html(CARD, "light")
+            self.assertNotIn('class="neko"', html)
+            self.assertNotIn('class="stage has-neko"', html)
+            art = render.build_article_html({"title": "t"}, [], 1, 1)
+            self.assertNotIn('class="neko"', art)
+        finally:
+            render._MASCOT_URI[:] = old
+
+    def test_article_bubble_truncates_title(self):
+        html = render.build_article_html({"title": "很长" * 20}, [], 1, 1)
+        bubble = html.split('class="bubble"')[1].split("</div>")[0]
+        self.assertIn("…", bubble)
+
+
 if __name__ == "__main__":
     unittest.main()
