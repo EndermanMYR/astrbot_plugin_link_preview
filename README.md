@@ -39,6 +39,7 @@
 - **自动识别**：群消息里出现链接就自动出卡片，不需要 @ 或指令
 - **19 个平台**：YouTube、TikTok、Instagram、X、GitHub、Bluesky、pixiv、Steam、Reddit、维基百科、维基文库、Dailymotion、niconico、Spotify、Vimeo、SoundCloud、Threads、Twitch、Facebook
 - **任意网站**：不在上面这些平台的链接也会按页面 OpenGraph 出一张卡（站名、域名、标题、摘要、封面、favicon），内网地址和直链文件自动跳过
+- **不用写 http://**：`www.bilibili.com`、`github.com/o/r`、`人民网.中国` 这种裸域名也能认出来；中文域名夹在中文句子里时分不清边界，这种情况不认
 - **热门评论**：YouTube、TikTok、X、Instagram、GitHub Issue/PR、Bluesky、pixiv、Steam 的卡片会附带几条高赞评论
 - **评论靠 Cookie**：X 需要登录态，填 `x_cookie` 即可，不用在服务器上跑浏览器登录
 - **Steam 评测**：抓社区里最有帮助的评测，带推荐/不推荐、游玩时长和赞数；填了 Web API Key 还能显示当前在线人数
@@ -93,6 +94,19 @@
 | 其他网站 | 页面 OpenGraph：站名、域名、标题、摘要、封面、favicon、发布时间 | — |
 
 「其他网站」默认开着：没被上面任何平台匹配到的链接，自动按普通网页抓 OpenGraph。不想要就在配置里关掉 `platforms.web`，或把域名填进 `web_blocklist`。
+
+链接不带 `http://` 也能认，包括中文域名：
+
+| 输入 | 识别成 |
+|---|---|
+| `www.bilibili.com` | `https://www.bilibili.com` |
+| `github.com/o/r` | GitHub 卡片 |
+| `人民网.中国` | `https://人民网.中国` |
+| `中文域名.cn` | `https://中文域名.cn` |
+
+裸域名只认常见顶级域（`com` `cn` `中国` `公司`…），所以 `1.2.3`、`file.txt`、`a@b.com` 不会被误判。中文域名必须前后有空格或标点——`我买了个中文.中国域名` 这种夹在句子里的不认，因为没法确定哪几个字是域名。
+
+中文域名的证书经常只签了 punycode 或压根没覆盖，https 校验不过时会自动降级 http 再试一次。
 
 ## 📦 安装 | Installation
 
@@ -365,7 +379,7 @@ asyncio.run(main())
 python -m unittest discover -s tests -t . -v
 ```
 
-覆盖的是容易悄悄坏掉的部分：链接识别（19 个平台 + 任意网页兜底、内网与直链过滤）、数字/时长/时间格式化、OpenGraph 解析、全文分页、词表匹配（含插字写法）、配置项与抓取器是否对齐、发布包是否缺文件、模板字体栈顺序、裁边逻辑。CI 在 `.github/workflows/ci.yml`，推 main 就跑。
+覆盖的是容易悄悄坏掉的部分：链接识别（19 个平台 + 任意网页兜底、裸域名与中文域名、内网与直链过滤）、数字/时长/时间格式化、OpenGraph 解析、全文分页、词表匹配（含插字写法）、配置项与抓取器是否对齐、发布包是否缺文件、模板字体栈顺序、裁边逻辑。CI 在 `.github/workflows/ci.yml`，推 main 就跑。
 
 ## ❤️ 致谢 | Credits
 

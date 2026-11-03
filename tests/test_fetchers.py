@@ -136,6 +136,59 @@ class TestWebFallback(unittest.TestCase):
         self.assertFalse(fetchers.is_previewable_web(""))
 
 
+class TestBareUrls(unittest.TestCase):
+    """群里常直接发 www.bilibili.com 这种没协议的域名。"""
+
+    def test_bare_domain(self):
+        self.assertEqual(fetchers.find_links("www.bilibili.com", ALL_ON),
+                         [("web", "https://www.bilibili.com")])
+
+    def test_bare_domain_with_path(self):
+        self.assertEqual(fetchers.find_links("看www.bilibili.com/video/BV1xx 这个", ALL_ON),
+                         [("web", "https://www.bilibili.com/video/BV1xx")])
+
+    def test_bare_domain_keeps_platform(self):
+        self.assertEqual(fetchers.find_links("github.com/o/r", ALL_ON)[0][0], "github")
+        self.assertEqual(fetchers.find_links("x.com/jack/status/20", ALL_ON)[0][0], "x")
+
+    def test_no_false_positive(self):
+        for text in ("版本 1.2.3 发布了", "文件 file.txt", "a@b.com", "e.g. this", "随便聊聊"):
+            self.assertEqual(fetchers.find_links(text, ALL_ON), [], text)
+
+    def test_scheme_url_not_counted_twice(self):
+        self.assertEqual(fetchers.find_links("https://example.com/x", ALL_ON),
+                         [("web", "https://example.com/x")])
+
+    def test_chinese_domain(self):
+        for text, want in (("中文.中国", "https://中文.中国"),
+                           ("中国政府.政务", "https://中国政府.政务"),
+                           ("中文域名.cn", "https://中文域名.cn"),
+                           ("百度.中国/搜索", "https://百度.中国/搜索")):
+            self.assertEqual(fetchers.find_links(text, ALL_ON), [("web", want)], text)
+
+    def test_chinese_domain_needs_boundary(self):
+        """中文域名夹在中文句子里没法分词，宁可不认。"""
+        for text in ("看中文.中国这个", "我买了个中文.中国域名"):
+            self.assertEqual(fetchers.find_links(text, ALL_ON), [], text)
+        # 有分隔就认
+        self.assertEqual(fetchers.find_links("推荐 中文.中国", ALL_ON),
+                         [("web", "https://中文.中国")])
+        self.assertEqual(fetchers.find_links("中文.中国，很好用", ALL_ON),
+                         [("web", "https://中文.中国")])
+
+    def test_chinese_text_does_not_break_ascii_domain(self):
+        self.assertEqual(fetchers.find_links("看www.bilibili.com这个", ALL_ON),
+                         [("web", "https://www.bilibili.com")])
+
+    def test_punycode_domain(self):
+        self.assertEqual(fetchers.find_links("xn--fiq228c.xn--fiqs8s", ALL_ON),
+                         [("web", "https://xn--fiq228c.xn--fiqs8s")])
+
+    def test_candidate_order(self):
+        self.assertEqual(fetchers.candidate_urls("先 https://a.com/1 再 b.com/2"),
+                         ["https://a.com/1", "https://b.com/2"])
+
+
 class TestCleanSite(unittest.TestCase):
     """og:site_name 常带整句标题，要压成短站名。"""
 
@@ -147,6 +200,12 @@ class TestCleanSite(unittest.TestCase):
     def test_keeps_plain_names(self):
         self.assertEqual(fetchers.clean_site("The GitHub Blog"), "The GitHub Blog")
         self.assertEqual(fetchers.clean_site(""), "")
+
+    def test_punycode_to_chinese(self):
+        self.assertEqual(fetchers.pretty_host("xn--fiqs8s"), "中国")
+        self.assertEqual(fetchers.pretty_host("xn--gmq282eogn.xn--fiqs8s"), "人民网.中国")
+        self.assertEqual(fetchers.pretty_host("www.example.com"), "www.example.com")
+        self.assertEqual(fetchers.pretty_host("xn--bad-"), "xn--bad-")   # 转不了原样返回
 
     def test_placeholder_description_dropped(self):
         self.assertIsNone(fetchers.clean_desc("视频播放量 {$0}、弹幕量 {$1}"))
@@ -197,6 +256,25 @@ class TestFetchOgWeb(unittest.TestCase):
         client = _FakeClient(_FakeResp("xx", "https://example.com/a", ctype="image/png"))
         with self.assertRaises(fetchers.FetchError):
             asyncio.run(fetchers.fetch_og(client, "web", "https://example.com/a"))
+
+    def test_cert_error_falls_back_to_http(self):
+        """中文域名证书常不匹配，https 失败要自动降级 http。"""
+        class CertFailClient:
+            def __init__(self):
+                self.urls = []
+
+            async def get(self, url, **kw):
+                self.urls.append(url)
+                if url.startswith("https://"):
+                    import httpx
+                    raise httpx.ConnectError(
+                        "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed")
+                return _FakeResp(TestFetchOgWeb.HTML, "http://example.com/post/1")
+
+        client = CertFailClient()
+        c = asyncio.run(fetchers.fetch_og(client, "web", "https://example.com/post/1"))
+        self.assertEqual(client.urls, ["https://example.com/post/1", "http://example.com/post/1"])
+        self.assertEqual(c["title"], "一篇文章")
 
     def test_login_wall_rejected(self):
         html = "<html><head><title>Log in</title></head></html>"

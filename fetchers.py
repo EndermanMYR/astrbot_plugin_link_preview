@@ -152,6 +152,99 @@ def canonical_url(url):
     return urlunsplit(("https", host, path, urlencode(query), ""))
 
 
+# 群里常有人直接发「www.bilibili.com」这种不带协议的裸域名，也要能认出来。
+# 只认常见顶级域，避免把 1.2.3、file.txt、a@b.com 之类误判成网址。
+COMMON_TLDS = {
+    "com", "net", "org", "edu", "gov", "mil", "int", "info", "biz", "name", "pro", "mobi",
+    "asia", "tel", "travel", "jobs", "cat", "coop", "aero", "museum", "app", "dev", "page",
+    "tech", "cloud", "site", "online", "shop", "store", "club", "xyz", "top", "vip", "win",
+    "link", "live", "news", "blog", "wiki", "space", "website", "press", "media", "video",
+    "music", "photo", "pics", "art", "design", "fun", "icu", "work", "today", "world", "life",
+    "zone", "cn", "jp", "kr", "tw", "hk", "mo", "sg", "in", "id", "th", "vn", "ph", "my",
+    "uk", "de", "fr", "it", "es", "nl", "be", "ch", "at", "se", "no", "fi", "dk", "pl", "cz",
+    "hu", "ro", "gr", "pt", "ie", "ru", "ua", "by", "kz", "tr", "il", "ae", "sa", "us", "ca",
+    "mx", "br", "ar", "cl", "pe", "ve", "au", "nz", "za", "eg", "ma", "ng", "ke", "tv", "cc",
+    "me", "ly", "gg", "to", "fm", "am", "ws", "la", "sh", "ac",
+}
+# 中文域名（IDN）：标签里可以是汉字，顶级域也是汉字（.中国 .公司 .网络 …）
+CJK_TLDS = {
+    "中国", "中國", "公司", "网络", "網絡", "网址", "網址", "网站", "網站", "商城", "商店",
+    "商标", "商標", "在线", "在線", "中文网", "中文網", "集团", "集團", "企业", "企業", "世界",
+    "游戏", "遊戲", "娱乐", "娛樂", "音乐", "音樂", "购物", "購物", "新闻", "新聞", "公益",
+    "政务", "政務", "政府", "机构", "機構", "组织", "組織", "教育", "招聘", "手机", "手機",
+    "时尚", "時尚", "汽车", "汽車", "博客", "微博", "我爱你", "我愛你", "美食", "酒店",
+    "旅游", "旅遊", "健康", "广东", "廣東", "佛山", "信息", "資訊", "移动", "移動", "网店",
+    "網店", "门户", "門戶", "餐厅", "餐廳", "家装", "家裝", "珠宝", "珠寶", "手表", "手錶",
+    "台湾", "台灣", "香港", "澳门", "澳門", "新加坡", "酷",
+}
+# 域名标签：ASCII 版和「允许汉字」版分开写。
+# 分开的原因：中文文本里汉字和域名常连在一起（「看www.bilibili.com这个」），
+# 如果只用一个允许汉字的正则，它会把「看www.bilibili.com」整个吃进去。
+_LABEL_ASCII = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+_LABEL_IDN = r"[A-Za-z0-9\u4e00-\u9fff](?:[A-Za-z0-9\u4e00-\u9fff-]{0,61}[A-Za-z0-9\u4e00-\u9fff])?"
+# 顶级域直接内联进正则（按长度倒序），这样「中文.中国这个」能停在「中国」，
+# 而不是贪婪吃到「中国这个」再被判非法。punycode 放最前面优先。
+_TLD_ASCII = "|".join(re.escape(t) for t in sorted(COMMON_TLDS, key=len, reverse=True))
+_TLD_ANY = "|".join(re.escape(t) for t in sorted(COMMON_TLDS | CJK_TLDS, key=len, reverse=True))
+_TAIL = r"(?::\d{2,5})?(/[^\s<>\"'，。！？、）】」]*)?"
+
+BARE_URL_RE = re.compile(
+    rf"(?<![A-Za-z0-9_@./:%-])((?:{_LABEL_ASCII}\.)+(?:xn--[A-Za-z0-9]{{2,30}}|{_TLD_ASCII})){_TAIL}",
+    re.I)
+IDN_URL_RE = re.compile(
+    rf"(?<![A-Za-z0-9_@./:%-])((?:{_LABEL_IDN}\.)+(?:xn--[A-Za-z0-9]{{2,30}}|{_TLD_ANY})){_TAIL}",
+    re.I)
+
+
+def _is_cjk(ch):
+    return "\u4e00" <= ch <= "\u9fff"
+
+
+def candidate_urls(text):
+    """文本里所有候选链接，按出现顺序返回。
+
+    带协议的优先；没协议的裸域名补上 https://，但要排除落在已知链接内部、
+    以及顶级域不在常见列表里的（1.2.3、file.txt、a@b.com 这类）。
+    """
+    text = text or ""
+    spans = []
+    for m in URL_RE.finditer(text):
+        url = m.group(0).rstrip(".,;:!?）】」")
+        while url.endswith(")") and url.count("(") < url.count(")"):
+            url = url[:-1]
+        spans.append((m.start(), m.start() + len(url), url))
+
+    out = [(start, url) for start, _, url in spans]
+    taken = [(a, b) for a, b, _ in spans]
+
+    # 先认纯 ASCII 域名：中文句子里的 www.xxx.com 不会被前面的汉字带偏
+    for m in BARE_URL_RE.finditer(text):
+        start, end = m.span()
+        if any(a < end and start < b for a, b in taken):
+            continue
+        out.append((start, "https://" + m.group(0)))
+        taken.append((start, end))
+
+    # 再认中文域名。夹在中文句子里没法分词（「我买了个中文.中国域名」到底哪几个字
+    # 是域名？），所以要求前后都是非汉字边界，宁可不认也不抓一个错的域名回来
+    for m in IDN_URL_RE.finditer(text):
+        start, end = m.span()
+        domain = m.group(1)
+        if not any(_is_cjk(c) for c in domain):
+            continue
+        if any(a < end and start < b for a, b in taken):
+            continue
+        before = text[start - 1] if start else ""
+        after = text[start + len(domain)] if start + len(domain) < len(text) else ""
+        if (before and _is_cjk(before)) or (after and _is_cjk(after)):
+            continue
+        out.append((start, "https://" + m.group(0)))
+        taken.append((start, end))
+
+    out.sort(key=lambda x: x[0])
+    return [url for _, url in out]
+
+
 # 通用网页预览要挡掉的目标：本机/内网地址（避免被当成内网探针）、直链文件
 _PRIVATE_HOST_RE = re.compile(
     r"^(?:localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+"
@@ -204,10 +297,7 @@ def find_links(text, enabled, limit=3, web_block=None):
     但内网地址、直链文件、黑名单域名会被跳过。
     """
     found, seen = [], set()
-    for raw in URL_RE.findall(text or ""):
-        url = raw.rstrip(".,;:!?）】」")
-        while url.endswith(")") and url.count("(") < url.count(")"):
-            url = url[:-1]
+    for url in candidate_urls(text):
         for key, pat in LINK_PATTERNS:
             m = pat.match(url)
             if not m:
@@ -369,6 +459,17 @@ def clean_site(name):
     return s[:40]
 
 
+def pretty_host(host):
+    """punycode 域名转回中文显示：xn--fiqs8s -> 中国。转不了就原样返回。"""
+    h = str(host or "").strip().rstrip(".")
+    if "xn--" not in h.lower():
+        return h
+    try:
+        return h.encode("ascii").decode("idna")
+    except (UnicodeError, ValueError):
+        return h
+
+
 def clean_desc(text):
     """页面描述：压成一行；模板变量没渲染的（{$0}）直接丢掉。"""
     if not text:
@@ -377,8 +478,21 @@ def clean_desc(text):
     return None if PLACEHOLDER_RE.search(t) else t
 
 
+def _is_cert_error(exc):
+    msg = str(exc).lower()
+    return "certificate" in msg or "ssl" in msg
+
+
 async def get_html(client, url, html_only=False, max_bytes=8 * 1024 * 1024, **kw):
-    r = await client.get(url, **kw)
+    try:
+        r = await client.get(url, **kw)
+    except httpx.ConnectError as e:
+        # 中文域名常见：证书只签了主域名或压根没覆盖 punycode，https 校验不过。
+        # 这类站点 http 一般能访问，降级再试一次，总比什么都不显示强
+        if html_only and url.startswith("https://") and _is_cert_error(e):
+            r = await client.get("http://" + url[len("https://"):], **kw)
+        else:
+            raise
     if r.status_code >= 400:
         raise FetchError(f"HTTP {r.status_code}")
     if html_only:
@@ -432,8 +546,11 @@ async def fetch_og(client, platform, url):
              images=[image] if image else [], video=(m.get("og:type") or "").startswith("video"))
 
     if platform == "web":
-        host = _host(final)
-        site = clean_site(m.get("og:site_name")) or host
+        host = pretty_host(_host(final))
+        site = clean_site(m.get("og:site_name"))
+        # 有的站点把 punycode 写进 og:site_name，直接显示是一串 xn--，不如用域名
+        if not site or "xn--" in site.lower():
+            site = host
         c["platform_name"] = site[:24]
         icon = _link_href(page, ("icon",)) or _link_href(page, ("image_src",))
         # 徽章已经显示站名了，作者行放域名，免得同一句话出现两次

@@ -506,8 +506,8 @@ class LinkPreviewPlugin(Star):
         if "http" not in text.lower() and not any(isinstance(s, Comp.Json) for s in event.get_messages() or []):
             return
         limit = _int(self.config.get("max_links_per_message", 2), 2, 1, 5)
-        found = fetchers.find_links(self._message_text(event), self._platforms(), limit,
-                                    self._web_blocklist())
+        text = self._message_text(event)
+        found = fetchers.find_links(text, self._platforms(), limit, self._web_blocklist())
         session = event.unified_msg_origin
         links = []
         for p, u in found:
@@ -516,6 +516,11 @@ class LinkPreviewPlugin(Star):
             else:
                 links.append((p, u))
         if not links:
+            # 消息里明明有网址却没出卡，日志里要能看出原因（平台关了 / 被过滤 / 重复）
+            if not found:
+                urls = fetchers.candidate_urls(text)
+                if urls:
+                    logger.info(f"[LinkPreview] 识别到网址但都不出卡（平台关闭或被过滤）：{urls[:2]}")
             return
         logger.info(f"[LinkPreview] 自动预览 {len(links)} 条：" + " | ".join(u for _, u in links))
         async for res in self._preview(event, links):
