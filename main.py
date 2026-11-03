@@ -162,6 +162,10 @@ class LinkPreviewPlugin(Star):
         """不想预览的域名（整站跳过，子域名也算）。"""
         return [str(x).strip() for x in self.config.get("web_blocklist") or [] if str(x).strip()]
 
+    def _extra_tlds(self):
+        """配置里补充的顶级域，用来认内置列表之外的域名。"""
+        return fetchers.normalize_tlds(self.config.get("extra_tlds") or [])
+
     def _allowed(self, event):
         if not _bool(self.config.get("enabled", True), True):
             return False
@@ -507,7 +511,8 @@ class LinkPreviewPlugin(Star):
             return
         limit = _int(self.config.get("max_links_per_message", 2), 2, 1, 5)
         text = self._message_text(event)
-        found = fetchers.find_links(text, self._platforms(), limit, self._web_blocklist())
+        found = fetchers.find_links(text, self._platforms(), limit, self._web_blocklist(),
+                                    self._extra_tlds())
         session = event.unified_msg_origin
         links = []
         for p, u in found:
@@ -701,7 +706,7 @@ class LinkPreviewPlugin(Star):
     def _links_from_command(self, event):
         text = self._message_text(event)
         everything = {k: True for k in fetchers.PLATFORMS}
-        links = fetchers.find_links(text, everything, 3)
+        links = fetchers.find_links(text, everything, 3, self._web_blocklist(), self._extra_tlds())
         if links:
             return links
         # 不在已知平台列表里的网址按普通网页处理

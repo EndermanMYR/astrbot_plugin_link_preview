@@ -17,6 +17,7 @@ import asyncio
 import html as htmllib
 import json
 import re
+from functools import lru_cache
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, quote, unquote, urlencode, urljoin, urlsplit, urlunsplit
 
@@ -182,30 +183,69 @@ CJK_TLDS = {
 # 如果只用一个允许汉字的正则，它会把「看www.bilibili.com」整个吃进去。
 _LABEL_ASCII = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
 _LABEL_IDN = r"[A-Za-z0-9\u4e00-\u9fff](?:[A-Za-z0-9\u4e00-\u9fff-]{0,61}[A-Za-z0-9\u4e00-\u9fff])?"
-# 顶级域直接内联进正则（按长度倒序），这样「中文.中国这个」能停在「中国」，
-# 而不是贪婪吃到「中国这个」再被判非法。punycode 放最前面优先。
-_TLD_ASCII = "|".join(re.escape(t) for t in sorted(COMMON_TLDS, key=len, reverse=True))
-_TLD_ANY = "|".join(re.escape(t) for t in sorted(COMMON_TLDS | CJK_TLDS, key=len, reverse=True))
 _TAIL = r"(?::\d{2,5})?(/[^\s<>\"'，。！？、）】」]*)?"
 
-BARE_URL_RE = re.compile(
-    rf"(?<![A-Za-z0-9_@./:%-])((?:{_LABEL_ASCII}\.)+(?:xn--[A-Za-z0-9]{{2,30}}|{_TLD_ASCII})){_TAIL}",
-    re.I)
-IDN_URL_RE = re.compile(
-    rf"(?<![A-Za-z0-9_@./:%-])((?:{_LABEL_IDN}\.)+(?:xn--[A-Za-z0-9]{{2,30}}|{_TLD_ANY})){_TAIL}",
-    re.I)
+
+def normalize_tlds(values):
+    """配置里填的额外顶级域：去掉前导点、转小写、去重。"""
+    out = []
+    for v in values or []:
+        t = str(v or "").strip().lower().lstrip(".")
+        if t and re.fullmatch(r"[a-z0-9\u4e00-\u9fff-]{1,24}", t):
+            out.append(t)
+    return tuple(sorted(set(out)))
+
+
+def _tld_alt(tlds):
+    # 按长度倒序内联进正则，这样「中文.中国这个」能停在「中国」，
+    # 而不是贪婪吃到「中国这个」再被判非法
+    return "|".join(re.escape(t) for t in sorted(tlds, key=len, reverse=True))
+
+
+@lru_cache(maxsize=16)
+def bare_patterns(extra=()):
+    """按「额外顶级域」生成两条裸域名正则，结果缓存。
+
+    ASCII 域名和中文域名分开：中文文本里汉字和域名常连在一起
+    （「看www.bilibili.com这个」），用一条允许汉字的正则会把前面的汉字吃进去。
+    """
+    extra = set(extra)
+    ascii_tlds = COMMON_TLDS | {t for t in extra if t.isascii()}
+    any_tlds = COMMON_TLDS | CJK_TLDS | extra
+    ascii_re = re.compile(
+        rf"(?<![A-Za-z0-9_@./:%-])"
+        rf"((?:{_LABEL_ASCII}\.)+(?:xn--[A-Za-z0-9]{{2,30}}|{_tld_alt(ascii_tlds)})){_TAIL}",
+        re.I)
+    idn_re = re.compile(
+        rf"(?<![A-Za-z0-9_@./:%-])"
+        rf"((?:{_LABEL_IDN}\.)+(?:xn--[A-Za-z0-9]{{2,30}}|{_tld_alt(any_tlds)})){_TAIL}",
+        re.I)
+    return ascii_re, idn_re
 
 
 def _is_cjk(ch):
     return "\u4e00" <= ch <= "\u9fff"
 
 
-def candidate_urls(text):
+def _cut_in_label(text, end):
+    """匹配后面还接着字母/数字/连字符，说明域名被截断了。
+
+    比如 example.mov 会先匹配到 example.mo（澳门），后面的 v 说明这不是完整域名。
+    """
+    if end >= len(text):
+        return False
+    ch = text[end]
+    return ch.isascii() and (ch.isalnum() or ch == "-")
+
+
+def candidate_urls(text, extra_tlds=None):
     """文本里所有候选链接，按出现顺序返回。
 
     带协议的优先；没协议的裸域名补上 https://，但要排除落在已知链接内部、
-    以及顶级域不在常见列表里的（1.2.3、file.txt、a@b.com 这类）。
+    以及顶级域不在白名单里的（1.2.3、file.txt、a@b.com 这类）。
+    extra_tlds 是配置里补充的顶级域，用来认内置列表之外的域名。
     """
+    ascii_re, idn_re = bare_patterns(normalize_tlds(extra_tlds))
     text = text or ""
     spans = []
     for m in URL_RE.finditer(text):
@@ -218,8 +258,10 @@ def candidate_urls(text):
     taken = [(a, b) for a, b, _ in spans]
 
     # 先认纯 ASCII 域名：中文句子里的 www.xxx.com 不会被前面的汉字带偏
-    for m in BARE_URL_RE.finditer(text):
+    for m in ascii_re.finditer(text):
         start, end = m.span()
+        if _cut_in_label(text, end):
+            continue
         if any(a < end and start < b for a, b in taken):
             continue
         out.append((start, "https://" + m.group(0)))
@@ -227,10 +269,12 @@ def candidate_urls(text):
 
     # 再认中文域名。夹在中文句子里没法分词（「我买了个中文.中国域名」到底哪几个字
     # 是域名？），所以要求前后都是非汉字边界，宁可不认也不抓一个错的域名回来
-    for m in IDN_URL_RE.finditer(text):
+    for m in idn_re.finditer(text):
         start, end = m.span()
         domain = m.group(1)
         if not any(_is_cjk(c) for c in domain):
+            continue
+        if _cut_in_label(text, end):
             continue
         if any(a < end and start < b for a, b in taken):
             continue
@@ -290,14 +334,14 @@ def _web_blocked(host, blocked):
     return False
 
 
-def find_links(text, enabled, limit=3, web_block=None):
+def find_links(text, enabled, limit=3, web_block=None, extra_tlds=None):
     """从文本里找出可预览的链接，返回 [(平台 key, 链接)]，同一链接只取一次。
 
     没被任何平台匹配到的 http(s) 链接会归到 "web"（通用 OpenGraph 预览），
     但内网地址、直链文件、黑名单域名会被跳过。
     """
     found, seen = [], set()
-    for url in candidate_urls(text):
+    for url in candidate_urls(text, extra_tlds):
         for key, pat in LINK_PATTERNS:
             m = pat.match(url)
             if not m:

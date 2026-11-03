@@ -172,6 +172,12 @@
         "default": [],
         "hint": "填域名即可，例如 bilibili.com；子域名也会跳过（live.bilibili.com）"
     },
+    "extra_tlds": {
+        "description": "额外识别的顶级域名",
+        "type": "list",
+        "default": [],
+        "hint": "内置了常见顶级域（com、cn、中国、公司…）。遇到认不出来的就填这里，例如 zip、mov、测试；不用带点"
+    },
     "dedupe_seconds": {
         "description": "同一链接在同一个群里多久内不重复预览（秒）",
         "type": "int",

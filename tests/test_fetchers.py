@@ -184,6 +184,24 @@ class TestBareUrls(unittest.TestCase):
         self.assertEqual(fetchers.find_links("xn--fiq228c.xn--fiqs8s", ALL_ON),
                          [("web", "https://xn--fiq228c.xn--fiqs8s")])
 
+    def test_extra_tlds(self):
+        """内置列表之外的顶级域，可以在配置里补充。"""
+        self.assertEqual(fetchers.find_links("example.zip", ALL_ON), [])
+        self.assertEqual(fetchers.find_links("example.zip", ALL_ON, 3, None, ["zip"]),
+                         [("web", "https://example.zip")])
+        self.assertEqual(fetchers.find_links("测试.测试域", ALL_ON, 3, None, ["测试域"]),
+                         [("web", "https://测试.测试域")])
+
+    def test_extra_tlds_normalized(self):
+        self.assertEqual(fetchers.normalize_tlds([".ZIP", "zip", " 中国 ", "", None]),
+                         ("zip", "中国"))
+
+    def test_extra_tlds_do_not_leak(self):
+        """正则按额外顶级域缓存，两套配置不能互相污染。"""
+        self.assertTrue(fetchers.find_links("example.zip", ALL_ON, 3, None, ["zip"]))
+        self.assertEqual(fetchers.find_links("example.zip", ALL_ON), [])
+        self.assertEqual(fetchers.find_links("example.mov", ALL_ON), [])
+
     def test_candidate_order(self):
         self.assertEqual(fetchers.candidate_urls("先 https://a.com/1 再 b.com/2"),
                          ["https://a.com/1", "https://b.com/2"])
