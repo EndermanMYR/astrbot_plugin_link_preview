@@ -156,7 +156,11 @@ class LinkPreviewPlugin(Star):
 
     def _platforms(self):
         conf = self.config.get("platforms") or {}
-        return {k: _bool(conf.get(k), True) for k in fetchers.PLATFORMS if k != "web"}
+        return {k: _bool(conf.get(k), True) for k in fetchers.PLATFORMS}
+
+    def _web_blocklist(self):
+        """不想预览的域名（整站跳过，子域名也算）。"""
+        return [str(x).strip() for x in self.config.get("web_blocklist") or [] if str(x).strip()]
 
     def _allowed(self, event):
         if not _bool(self.config.get("enabled", True), True):
@@ -502,7 +506,8 @@ class LinkPreviewPlugin(Star):
         if "http" not in text.lower() and not any(isinstance(s, Comp.Json) for s in event.get_messages() or []):
             return
         limit = _int(self.config.get("max_links_per_message", 2), 2, 1, 5)
-        found = fetchers.find_links(self._message_text(event), self._platforms(), limit)
+        found = fetchers.find_links(self._message_text(event), self._platforms(), limit,
+                                    self._web_blocklist())
         session = event.unified_msg_origin
         links = []
         for p, u in found:

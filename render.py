@@ -101,7 +101,8 @@ async def prepare(client, card, text_length=420, show_images=True, comments_mode
         c["quote"] = dict(c["quote"], text=_clip(c["quote"].get("text"), 200))
     host = urlsplit(c["url"]).hostname or ""
     c["domain"] = host.removeprefix("www.")
-    short = unquote(c["url"].split("://", 1)[-1])
+    # 页脚只显示域名和路径，去掉 www. 和结尾的斜杠
+    short = unquote(c["url"].split("://", 1)[-1]).removeprefix("www.").rstrip("/")
     c["short_url"] = short if len(short) <= 64 else short[:63] + "…"
     c["icon"] = ICONS.get(c["platform"], "↗")
     if c.get("sensitive") and c.get("images"):
@@ -118,7 +119,7 @@ async def prepare_article(client, article):
     a = dict(article)
     a["image"] = await _data_uri(client, a.get("image"))
     a["domain"] = urlsplit(a["url"]).hostname or "wikipedia.org"
-    short = unquote(a["url"].split("://", 1)[-1])
+    short = unquote(a["url"].split("://", 1)[-1]).removeprefix("www.").rstrip("/")
     a["short_url"] = short if len(short) <= 70 else short[:69] + "…"
     return a
 

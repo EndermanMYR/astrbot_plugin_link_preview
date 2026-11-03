@@ -104,6 +104,12 @@
                 "description": "niconico（ニコニコ動画）",
                 "type": "bool",
                 "default": true
+            },
+            "web": {
+                "description": "其他网站（通用网页预览）",
+                "type": "bool",
+                "default": true,
+                "hint": "没被上面任何平台匹配到的链接，按页面 OpenGraph 出一张卡。内网地址和直链文件会自动跳过"
             }
         }
     },
@@ -159,6 +165,12 @@
         "description": "一条消息最多预览几个链接",
         "type": "int",
         "default": 2
+    },
+    "web_blocklist": {
+        "description": "不预览的网站",
+        "type": "list",
+        "default": [],
+        "hint": "填域名即可，例如 bilibili.com；子域名也会跳过（live.bilibili.com）"
     },
     "dedupe_seconds": {
         "description": "同一链接在同一个群里多久内不重复预览（秒）",

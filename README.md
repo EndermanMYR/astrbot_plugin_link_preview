@@ -38,6 +38,7 @@
 
 - **自动识别**：群消息里出现链接就自动出卡片，不需要 @ 或指令
 - **19 个平台**：YouTube、TikTok、Instagram、X、GitHub、Bluesky、pixiv、Steam、Reddit、维基百科、维基文库、Dailymotion、niconico、Spotify、Vimeo、SoundCloud、Threads、Twitch、Facebook
+- **任意网站**：不在上面这些平台的链接也会按页面 OpenGraph 出一张卡（站名、域名、标题、摘要、封面、favicon），内网地址和直链文件自动跳过
 - **热门评论**：YouTube、TikTok、X、Instagram、GitHub Issue/PR、Bluesky、pixiv、Steam 的卡片会附带几条高赞评论
 - **评论靠 Cookie**：X 需要登录态，填 `x_cookie` 即可，不用在服务器上跑浏览器登录
 - **Steam 评测**：抓社区里最有帮助的评测，带推荐/不推荐、游玩时长和赞数；填了 Web API Key 还能显示当前在线人数
@@ -89,8 +90,9 @@
 | Spotify / Vimeo / SoundCloud | 标题、作者、封面 | — |
 | Twitch | 频道资料、是否在播、直播标题、观众数、分类、16:9 预览图；切片也行（走公开 GQL，不受登录墙影响） | — |
 | Threads / Facebook | 页面元信息（要登录的页面不发） | — |
+| 其他网站 | 页面 OpenGraph：站名、域名、标题、摘要、封面、favicon、发布时间 | — |
 
-不在列表里的网址，用 `/预览 链接` 会按普通网页抓 OpenGraph 信息。
+「其他网站」默认开着：没被上面任何平台匹配到的链接，自动按普通网页抓 OpenGraph。不想要就在配置里关掉 `platforms.web`，或把域名填进 `web_blocklist`。
 
 ## 📦 安装 | Installation
 
@@ -156,6 +158,7 @@ AstrBot WebUI -> 插件 -> 插件配置
 | `enabled` | 启用自动识别 |
 | `platforms` | 分平台开关，默认全开 |
 | `max_links_per_message` | 一条消息最多预览几个链接，默认 `2` |
+| `web_blocklist` | 不预览的域名，填 `bilibili.com` 会连 `live.bilibili.com` 一起跳过 |
 | `dedupe_seconds` | 同一链接在同一个群里多久内不重复预览，默认 `30` |
 | `private_enabled` | 私聊里也自动识别，默认关 |
 | `group_whitelist` / `group_blacklist` | 只在这些群 / 不在这些群自动识别 |
@@ -362,17 +365,7 @@ asyncio.run(main())
 python -m unittest discover -s tests -t . -v
 ```
 
-覆盖的是容易悄悄坏掉的部分：链接识别（19 个平台）、数字/时长/时间格式化、OpenGraph 解析、全文分页、词表匹配（含插字写法）、配置项与抓取器是否对齐、发布包是否缺文件、模板字体栈顺序、裁边逻辑。CI 在 `.github/workflows/ci.yml`，推 main 就跑。
-
-### 单元测试
-
-测试用标准库 `unittest`，不联网、不需要 AstrBot（`tests/_stub.py` 会在进程内伪造 `astrbot.api.logger`）：
-
-```bash
-python -m unittest discover -s tests -t . -v
-```
-
-覆盖的是容易悄悄坏掉的部分：链接识别（19 个平台）、数字/时长/时间格式化、OpenGraph 解析、全文分页、词表匹配（含插字写法）、配置项与抓取器是否对齐、发布包是否缺文件。CI 在 `.github/workflows/ci.yml`，推 main 就跑。
+覆盖的是容易悄悄坏掉的部分：链接识别（19 个平台 + 任意网页兜底、内网与直链过滤）、数字/时长/时间格式化、OpenGraph 解析、全文分页、词表匹配（含插字写法）、配置项与抓取器是否对齐、发布包是否缺文件、模板字体栈顺序、裁边逻辑。CI 在 `.github/workflows/ci.yml`，推 main 就跑。
 
 ## ❤️ 致谢 | Credits
 

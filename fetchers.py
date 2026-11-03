@@ -98,6 +98,8 @@ LINK_PATTERNS = [
     ("soundcloud", re.compile(r"https?://(?:www\.|m\.)?soundcloud\.com/[^\s/<>\"']+/[^\s<>\"']+", re.I)),
     ("og", re.compile(
         r"https?://(?:www\.|m\.)?(?:threads\.(?:net|com)|twitch\.tv|facebook\.com|fb\.watch)/[^\s<>\"']+", re.I)),
+    # 兜底：剩下的任何 http(s) 链接都按通用网页抓 OpenGraph
+    ("web", re.compile(r"https?://[^\s<>\"']+", re.I)),
 ]
 
 # GitHub 一级路径里不是用户名的保留词
@@ -150,8 +152,57 @@ def canonical_url(url):
     return urlunsplit(("https", host, path, urlencode(query), ""))
 
 
-def find_links(text, enabled, limit=3):
-    """从文本里找出可预览的链接，返回 [(平台 key, 链接)]，同一链接只取一次。"""
+# 通用网页预览要挡掉的目标：本机/内网地址（避免被当成内网探针）、直链文件
+_PRIVATE_HOST_RE = re.compile(
+    r"^(?:localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+"
+    r"|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|169\.254\.\d+\.\d+|0\.0\.0\.0|::1)$", re.I)
+_PRIVATE_SUFFIX = (".local", ".internal", ".lan", ".localhost", ".home.arpa")
+_FILE_EXT_RE = re.compile(
+    r"\.(?:jpe?g|png|gif|webp|bmp|svg|ico|tiff?|heic"
+    r"|mp4|m4v|mov|avi|mkv|webm|flv|wmv|m3u8"
+    r"|mp3|m4a|wav|flac|aac|ogg|opus"
+    r"|zip|rar|7z|tar|gz|bz2|xz|apk|exe|msi|dmg|pkg|deb|rpm|iso|bin|torrent"
+    r"|pdf|docx?|xlsx?|pptx?|epub|mobi|css|js|json|xml|csv|txt)$", re.I)
+
+
+def is_previewable_web(url):
+    """普通网页能不能预览：只收 http(s)、公网域名、看起来是页面的路径。"""
+    try:
+        u = urlsplit(str(url or "").strip())
+    except ValueError:
+        return False
+    if u.scheme.lower() not in ("http", "https"):
+        return False
+    host = (u.hostname or "").strip("[]").lower()
+    if not host or "." not in host:
+        return False
+    if _PRIVATE_HOST_RE.match(host) or host.endswith(_PRIVATE_SUFFIX):
+        return False
+    if _FILE_EXT_RE.search(u.path or ""):
+        return False
+    return True
+
+
+def _web_blocked(host, blocked):
+    """域名黑名单：example.com 也挡 sub.example.com。"""
+    h = (host or "").lower()
+    if h.startswith("www."):
+        h = h[4:]
+    for item in blocked or []:
+        b = str(item or "").strip().lower().lstrip("@")
+        if b.startswith("www."):
+            b = b[4:]
+        if b and (h == b or h.endswith("." + b)):
+            return True
+    return False
+
+
+def find_links(text, enabled, limit=3, web_block=None):
+    """从文本里找出可预览的链接，返回 [(平台 key, 链接)]，同一链接只取一次。
+
+    没被任何平台匹配到的 http(s) 链接会归到 "web"（通用 OpenGraph 预览），
+    但内网地址、直链文件、黑名单域名会被跳过。
+    """
     found, seen = [], set()
     for raw in URL_RE.findall(text or ""):
         url = raw.rstrip(".,;:!?）】」")
@@ -163,6 +214,9 @@ def find_links(text, enabled, limit=3):
                 continue
             platform = OG_SITES.get(_host(url), "web") if key == "og" else key
             if platform == "github" and m.group(1).lower() in GITHUB_RESERVED:
+                break
+            if platform == "web" and (not is_previewable_web(url)
+                                      or _web_blocked(_host(url), web_block)):
                 break
             ident = "|".join(g for g in m.groups() if g)
             key = (platform, ident) if ident else (platform, canonical_url(url))
@@ -298,31 +352,104 @@ def parse_meta(page):
     return meta
 
 
-async def get_html(client, url, **kw):
+# og:site_name 经常带整句标题（「少数派 - 高品质数字消费指南」），取前一段当站名
+SITE_SPLIT_RE = re.compile(r"\s+[-–—|·_]\s+|\s*[|｜]\s*")
+# 有些页面（B 站）把模板变量原样写进 description：「视频播放量 {$0}」
+PLACEHOLDER_RE = re.compile(r"\{\$\d+\}")
+
+
+def clean_site(name):
+    """站点名压短：太长的按分隔符取前半段。"""
+    s = flatten(name)
+    if not s:
+        return ""
+    head = SITE_SPLIT_RE.split(s, 1)[0].strip()
+    if head and head != s:
+        s = head
+    return s[:40]
+
+
+def clean_desc(text):
+    """页面描述：压成一行；模板变量没渲染的（{$0}）直接丢掉。"""
+    if not text:
+        return None
+    t = flatten(text)
+    return None if PLACEHOLDER_RE.search(t) else t
+
+
+async def get_html(client, url, html_only=False, max_bytes=8 * 1024 * 1024, **kw):
     r = await client.get(url, **kw)
     if r.status_code >= 400:
         raise FetchError(f"HTTP {r.status_code}")
+    if html_only:
+        # 有的链接看着像网页，其实是图片/压缩包，抓回来也解析不出东西
+        ctype = (r.headers.get("content-type") or "").lower()
+        if ctype and not (ctype.startswith("text/") or "xhtml" in ctype):
+            raise FetchError(f"不是网页（{ctype.split(';')[0].strip()}）")
+        if len(r.content) > max_bytes:
+            raise FetchError("页面太大")
     return r.text, str(r.url)
 
 
+LINK_TAG_RE = re.compile(r"<link\s+[^>]*>", re.I)
+
+
+def _link_href(page, rels):
+    """从 <link rel="..."> 里取 href（favicon 之类）。"""
+    for tag in LINK_TAG_RE.findall(page[:300_000]):
+        attrs = {m.group(1).lower(): (m.group(3) if m.group(3) is not None else m.group(4))
+                 for m in ATTR_RE.finditer(tag)}
+        rel = (attrs.get("rel") or "").lower()
+        if attrs.get("href") and any(r in rel for r in rels):
+            return htmllib.unescape(attrs["href"]).strip()
+    return None
+
+
 async def fetch_og(client, platform, url):
-    page, final = await get_html(client, url)
+    """通用网页 / 只提供 OpenGraph 的站点。
+
+    og:image 常常是相对路径，要按最终 URL 补全；站点名和 favicon 拿来当「作者」，
+    卡片才不至于只剩一行标题。
+    """
+    page, final = await get_html(client, url, html_only=True)
     m = parse_meta(page)
     title = m.get("og:title") or m.get("twitter:title") or m.get("title")
-    desc = m.get("og:description") or m.get("description")
+    desc = m.get("og:description") or m.get("twitter:description") or m.get("description")
     if not title:
         raise FetchError("页面没有可用的标题信息")
+    title = flatten(title)
+    desc = clean_desc(desc)
     # 被登录墙挡住时只能拿到站点名，这种卡片没有意义，直接放弃
     generic = {PLATFORMS.get(platform, PLATFORMS["web"])[0].lower(), "instagram", "tiktok", "threads",
                "facebook", "log in", "login", "sign in", "登录"}
     if title.strip().lower() in generic and not (desc and desc.strip().lower() not in generic):
         raise FetchError("页面需要登录，拿不到内容")
-    image = m.get("og:image") or m.get("twitter:image")
-    site = m.get("og:site_name")
+    image = (m.get("og:image") or m.get("og:image:secure_url")
+             or m.get("twitter:image") or m.get("twitter:image:src"))
+    if image:
+        image = urljoin(final, image)
     c = card(platform, url, title=title, text=desc,
              images=[image] if image else [], video=(m.get("og:type") or "").startswith("video"))
-    if platform == "web" and site:
-        c["platform_name"] = site
+
+    if platform == "web":
+        host = _host(final)
+        site = clean_site(m.get("og:site_name")) or host
+        c["platform_name"] = site[:24]
+        icon = _link_href(page, ("icon",)) or _link_href(page, ("image_src",))
+        # 徽章已经显示站名了，作者行放域名，免得同一句话出现两次
+        c["author"] = {
+            "name": host,
+            "handle": None,
+            "avatar": urljoin(final, icon) if icon else None,
+            "bio": None,
+        }
+        # 只认发布时间：首页的 og:updated_time 是「最后更新」，当发布时间显示很怪
+        c["time"] = fmt_time(m.get("article:published_time") or m.get("article:modified_time"))
+        tags = m.get("article:tag")
+        if tags:
+            c["tags"] = [t.strip() for t in str(tags).split(",") if t.strip()][:3]
+    elif m.get("og:site_name"):
+        c["platform_name"] = m["og:site_name"]
     return c
 
 
