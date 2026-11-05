@@ -552,6 +552,11 @@ class LinkPreviewPlugin(Star):
             inside = {fetchers.canonical_url(u) for a in miniapps
                       for u in (a["page"], a["real"], a["icon"], a["preview"]) if u}
             found = [(p, u) for p, u in found if fetchers.canonical_url(u) not in inside]
+            logger.info("[LinkPreview] QQ 小程序卡片 %d 个：%s" % (
+                len(miniapps),
+                " | ".join(f"{a['title']} -> {a['real'] or a['page'] or a['appid']}" for a in miniapps)))
+        elif "q.qq.com" in text:
+            logger.info("[LinkPreview] 消息里有 q.qq.com 但没解析出小程序卡片，按普通网页处理")
         session = event.unified_msg_origin
         links = []
         for ark in miniapps:
@@ -577,7 +582,7 @@ class LinkPreviewPlugin(Star):
                 if urls:
                     logger.info(f"[LinkPreview] 识别到网址但都不出卡（平台关闭或被过滤）：{urls[:2]}")
             return
-        logger.info(f"[LinkPreview] 自动预览 {len(links)} 条：" + " | ".join(u for _, u in links))
+        logger.info(f"[LinkPreview] 自动预览 {len(links)} 条：" + " | ".join(str(x[1]) for x in links))
         async for res in self._preview(event, links):
             yield res
 

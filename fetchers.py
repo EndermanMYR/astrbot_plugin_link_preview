@@ -1780,8 +1780,15 @@ def _ark_objects(text):
 
     Json 消息组件和 [CQ:json,data=...] 都是合法 JSON，直接逐个 "{" 试解析，
     比按字段名找更耐改（不同版本 QQ 的字段顺序不一样）。
+    有的适配器会把引号转义成 &quot;，这种情况再解一次 HTML 实体重试。
     """
-    text = text or ""
+    out = _ark_scan(text or "")
+    if not out and "&" in (text or ""):
+        out = _ark_scan(htmllib.unescape(text))
+    return out
+
+
+def _ark_scan(text):
     dec = json.JSONDecoder()
     out, i = [], text.find("{")
     while i >= 0:
