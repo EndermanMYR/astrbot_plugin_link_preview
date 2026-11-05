@@ -44,7 +44,6 @@ RESTRICTED_NAME = "restricted.txt"
 # 旧版本把词表写在 data/sensitive_words/，只在迁移时读取一次，不再往那里写。
 LEGACY_WORDS_FILE = "data/sensitive_words/political.txt"
 BLOCK_NOTICE = "这个链接的内容包含屏蔽词，不予预览。"
-SEND_FAIL_NOTICE = "这张预览卡片发送失败（可能被 QQ 拦截了），请直接点链接查看。"
 REPLY_BLOCK_NOTICE = "（这条回复包含屏蔽词，已拦截）"
 
 
@@ -88,6 +87,12 @@ def _int(v, default, lo, hi):
         return max(lo, min(hi, int(v)))
     except (TypeError, ValueError):
         return default
+
+
+def _brief(e, limit=200):
+    """异常转成能直接发到群里的一句话。"""
+    text = " ".join(str(e or "").split()) or e.__class__.__name__
+    return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
 class LinkPreviewPlugin(Star):
@@ -312,13 +317,13 @@ class LinkPreviewPlugin(Star):
     # ------------------------------------------------------------------ 发送
 
     async def _send_or_notice(self, event, chain):
-        """自己发，发不出去（比如被 QQ 拦截）就返回 False，由调用方补一句提醒。"""
+        """自己发；发不出去返回错误原因（字符串），成功返回 None。"""
         try:
             await event.send(MessageChain(chain))
-            return True
+            return None
         except Exception as e:
             logger.warning(f"[LinkPreview] 发送失败：{e}")
-            return False
+            return _brief(e)
 
     # ------------------------------------------------------------------ 工具
 
@@ -418,6 +423,9 @@ class LinkPreviewPlugin(Star):
                     self.html_render(tmpl, data, return_url=False, options=render.t2i_options()),
                     timeout,
                 )
+                problem = render.image_problem(path)
+                if problem:
+                    raise RuntimeError(problem)
                 shutil.copyfile(path, out)
                 render.crop_image(str(out))
                 return str(out)
@@ -518,15 +526,15 @@ class LinkPreviewPlugin(Star):
                 continue
             except Exception as e:
                 logger.warning(f"[LinkPreview] {platform} {url} 预览失败：{e}")
-                if not quiet:
-                    yield event.plain_result(f"预览失败：{e}")
+                yield event.plain_result(f"预览失败：{_brief(e)}")
                 continue
             if not path:
                 continue
             self._last_link[session] = (platform, url)
             image = Comp.Image.fromURL(path) if str(path).startswith("http") else Comp.Image.fromFileSystem(path)
-            if not await self._send_or_notice(event, [image]):
-                yield event.plain_result(SEND_FAIL_NOTICE)
+            err = await self._send_or_notice(event, [image])
+            if err:
+                yield event.plain_result(f"卡片发送失败：{err}")
 
     # ------------------------------------------------------------------ 自动识别
 
@@ -753,13 +761,13 @@ class LinkPreviewPlugin(Star):
             self._clean_videos()
 
         size_mb = path.stat().st_size / 1024 / 1024
-        ok = await self._send_or_notice(event, [Comp.Video.fromFileSystem(str(path))])
-        if not ok:
+        err = await self._send_or_notice(event, [Comp.Video.fromFileSystem(str(path))])
+        if err:
             # 视频发不出去（格式或大小被拦）就退成文件
-            ok = await self._send_or_notice(
+            err = await self._send_or_notice(
                 event, [Comp.File(name=path.name, file=f"file://{path}")])
-        if not ok:
-            yield event.plain_result(f"下载好了（{size_mb:.1f} MB）但发不出去，可能超过群文件上限")
+        if err:
+            yield event.plain_result(f"下载好了（{size_mb:.1f} MB）但发不出去：{err}")
 
     @filter.command("全文", alias={"fulltext", "维基全文"})
     async def fulltext_cmd(self, event: AstrMessageEvent):
@@ -799,8 +807,9 @@ class LinkPreviewPlugin(Star):
             head = head.replace("\n", f"\n{article['byline']}\n", 1)
         nodes = [Comp.Node(uin=bot, name=sender, content=[Comp.Plain(head)])]
         nodes += [Comp.Node(uin=bot, name=sender, content=[Comp.Image.fromFileSystem(p)]) for p in paths]
-        if not await self._send_or_notice(event, [Comp.Nodes(nodes)]):
-            yield event.plain_result("全文发送失败（可能被 QQ 拦截了），请直接点链接查看。")
+        err = await self._send_or_notice(event, [Comp.Nodes(nodes)])
+        if err:
+            yield event.plain_result(f"全文发送失败：{err}")
 
     def _links_from_command(self, event):
         text = self._message_text(event)

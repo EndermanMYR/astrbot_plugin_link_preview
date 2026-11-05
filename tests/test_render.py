@@ -265,5 +265,35 @@ class TestMascot(unittest.TestCase):
         self.assertIn("…", bubble)
 
 
+class TestImageProblem(unittest.TestCase):
+    """文转图服务出错时返回的是错误正文，不能被当成图片发出去。"""
+
+    def write(self, data):
+        fd, path = tempfile.mkstemp(suffix=".jpg")
+        os.close(fd)
+        with open(path, "wb") as f:
+            f.write(data)
+        self.addCleanup(os.unlink, path)
+        return path
+
+    def test_real_jpeg_ok(self):
+        self.assertEqual(render.image_problem(self.write(b"\xff\xd8\xff" + b"0" * 5000)), "")
+
+    def test_real_png_ok(self):
+        self.assertEqual(render.image_problem(self.write(b"\x89PNG\r\n\x1a\n" + b"0" * 5000)), "")
+
+    def test_error_body_is_reported(self):
+        msg = render.image_problem(self.write(b"no available server\n"))
+        self.assertIn("no available server", msg)
+        self.assertIn("不是图片", msg)
+
+    def test_html_error_is_reported(self):
+        msg = render.image_problem(self.write(b"<html><body><h1>408 Request Time-out</h1></body></html>"))
+        self.assertIn("408", msg)
+
+    def test_missing_file(self):
+        self.assertIn("读不到渲染结果", render.image_problem("/tmp/definitely-not-here.jpg"))
+
+
 if __name__ == "__main__":
     unittest.main()

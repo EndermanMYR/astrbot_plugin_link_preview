@@ -296,6 +296,28 @@ def t2i_options():
     return {"type": "jpeg", "quality": 92, "full_page": True}
 
 
+def image_problem(path):
+    """文转图服务出错时会把错误正文写进临时文件，按文件头判断拿到的是不是图。
+
+    不校验的话，错误正文会被当成 .jpg 发出去，最后只看到「发送失败」，
+    真正的原因（no available server、408 之类）反而被吞掉。
+    返回空串表示没问题，否则返回一句能直接发给用户的原因。
+    """
+    try:
+        data = Path(path).read_bytes()
+    except OSError as e:
+        return f"读不到渲染结果：{e}"
+    head = data[:16]
+    is_image = (head[:3] == b"\xff\xd8\xff" or head[:8] == b"\x89PNG\r\n\x1a\n"
+                or head[:4] == b"GIF8"
+                or (head[:4] == b"RIFF" and data[8:12] == b"WEBP"))
+    if is_image and len(data) > 1024:
+        return ""
+    body = " ".join(data[:200].decode("utf-8", "replace").split())
+    return (f"文转图服务返回的不是图片（{len(data)} 字节）：{body}" if body
+            else f"文转图服务返回了空文件（{len(data)} 字节）")
+
+
 def crop_image(path, pad=8, threshold=10):
     """裁掉四周与背景色相同的留白。
 
