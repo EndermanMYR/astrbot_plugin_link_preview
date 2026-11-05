@@ -731,6 +731,21 @@ class TestQQMiniApp(unittest.TestCase):
         self.assertEqual(c["images"], ["https://i0.hdslb.com/bfs/archive/xxx.jpg"])
         self.assertTrue(c["note"])
 
+    def test_wrapped_payloads(self):
+        """OneBot 的 json 段常把卡片再包一层字符串，几种封装都要认得出来。"""
+        inner = json.dumps(self.ARK, ensure_ascii=False)
+        for text in (
+            inner,
+            "[CQ:json,data=" + inner + "]",
+            json.dumps({"type": "json", "data": {"data": inner}}, ensure_ascii=False),
+            json.dumps({"data": inner}, ensure_ascii=False),
+            json.dumps(inner, ensure_ascii=False),
+            inner.replace('"', "&quot;"),
+        ):
+            got = fetchers.qq_miniapps(text)
+            self.assertEqual(len(got), 1, text[:60])
+            self.assertEqual(got[0]["real"], "https://b23.tv/AbCdEf?share_source=qq", text[:60])
+
 
 if __name__ == "__main__":
     unittest.main()

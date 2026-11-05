@@ -1780,12 +1780,45 @@ def _ark_objects(text):
 
     Json 消息组件和 [CQ:json,data=...] 都是合法 JSON，直接逐个 "{" 试解析，
     比按字段名找更耐改（不同版本 QQ 的字段顺序不一样）。
-    有的适配器会把引号转义成 &quot;，这种情况再解一次 HTML 实体重试。
+
+    但 OneBot 的 json 段常常是 {"type":"json","data":{"data":"{\\"app\\":...}"}}，
+    卡片 JSON 被当成字符串又包了一层，转义后直接扫描扫不到；适配器也可能把引号
+    转义成 &quot;。所以扫不到时再按「拆字符串 / 解 HTML 实体」的几种写法重试。
     """
-    out = _ark_scan(text or "")
-    if not out and "&" in (text or ""):
-        out = _ark_scan(htmllib.unescape(text))
-    return out
+    text = text or ""
+    for candidate in _ark_candidates(text):
+        out = _ark_scan(candidate)
+        if out:
+            return out
+    return []
+
+
+def _ark_candidates(text):
+    """同一段消息的几种等价写法，按「最可能是原样」的顺序给。"""
+    yield text
+    if "&" in text:
+        yield htmllib.unescape(text)
+    if '\\"' in text:
+        yield text.replace('\\"', '"')
+    # 多包一层字符串：{"data": "{...}"}、或者整段就是 "\"{...}\""
+    cur = text.strip()
+    for _ in range(3):
+        try:
+            obj = json.loads(cur)
+        except ValueError:
+            break
+        if isinstance(obj, str):
+            cur = obj
+        elif isinstance(obj, dict):
+            inner = obj.get("data") or obj.get("json") or obj.get("content")
+            if not isinstance(inner, str):
+                break
+            cur = inner
+        else:
+            break
+        yield cur
+        if '\\"' in cur:
+            yield cur.replace('\\"', '"')
 
 
 def _ark_scan(text):
