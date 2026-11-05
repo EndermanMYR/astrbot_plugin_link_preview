@@ -40,6 +40,7 @@
 - **19 个平台**：YouTube、TikTok、Instagram、X、GitHub、Bluesky、pixiv、Steam、Reddit、维基百科、维基文库、Dailymotion、niconico、Spotify、Vimeo、SoundCloud、Threads、Twitch、Facebook
 - **国内视频平台**：B 站（含 `b23.tv` 短链）、抖音、快手、西瓜视频、腾讯视频、优酷、爱奇艺、微博、小红书，卡片带封面、UP 主、播放/弹幕/点赞，`/下载视频` 直接把视频发到群里
 - **任意网站**：不在上面这些平台的链接也会按页面 OpenGraph 出一张卡（站名、域名、标题、摘要、封面、favicon），内网地址和直链文件自动跳过
+- **QQ 小程序**：群里分享的小程序卡片能认出 `qqdocurl`，背后的 B 站、抖音、小红书链接照常出卡；抓不到网页的纯小程序用卡片自带的标题和封面出卡，不会再被当成普通网页乱抓一通
 - **不用写 http://**：`www.bilibili.com`、`github.com/o/r`、`人民网.中国` 这种裸域名也能认出来；中文域名夹在中文句子里时分不清边界，这种情况不认
 - **热门评论**：YouTube、TikTok、X、Instagram、GitHub Issue/PR、Bluesky、pixiv、Steam 的卡片会附带几条高赞评论
 - **评论靠 Cookie**：X 需要登录态，填 `x_cookie` 即可，不用在服务器上跑浏览器登录
@@ -95,8 +96,11 @@
 | 哔哩哔哩 | 标题、UP 主、封面、时长、播放/弹幕/点赞/收藏、发布时间；`b23.tv` 短链自动展开 | — |
 | 抖音 / 快手 / 西瓜视频 / 腾讯视频 / 优酷 / 爱奇艺 / 微博 / 小红书 | 标题、作者、封面、时长、播放/点赞/评论（走 yt-dlp） | — |
 | 其他网站 | 页面 OpenGraph：站名、域名、标题、摘要、封面、favicon、发布时间 | — |
+| QQ 小程序分享卡片 | 带 `qqdocurl` 的直接抓它背后的真实网页（B 站、抖音等照常出卡）；纯小程序用卡片自带的标题、简介、封面出卡，不再当成普通网页乱抓 | — |
 
 「其他网站」默认开着：没被上面任何平台匹配到的链接，自动按普通网页抓 OpenGraph。不想要就在配置里关掉 `platforms.web`，或把域名填进 `web_blocklist`。
+
+QQ 小程序卡片（`platforms.qqminiapp`）会先看卡片里的 `qqdocurl`：有就按真实网页走对应平台，没有就只用卡片自带的标题和封面出卡——`m.q.qq.com/a/s/...` 那页只有 QQ 客户端能打开，服务端抓不到内容，所以不再对它发请求。
 
 链接不带 `http://` 也能认，包括中文域名：
 

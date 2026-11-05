@@ -27,6 +27,7 @@ HELP = """外链预览
 /全文 [维基链接]：把维基百科词条或维基文库作品的全文分页，合并转发发出（也可用 /维基全文）
 /预览图片 [开/关/默认]：管理员切换本群卡片是否显示配图和封面，不带参数查看当前状态
 /预览帮助：查看这条帮助
+群里分享的 QQ 小程序卡片也能认：能拿到 qqdocurl 的按背后的真实网页出卡，纯小程序用卡片自带的标题和封面出卡。
 能拿到评论的平台：YouTube、TikTok、X（需配置浏览器服务，较慢）、GitHub Issue/PR、Bluesky、pixiv。Instagram、Reddit 拿不到评论。"""
 
 PLUGIN_NAME = "astrbot_plugin_link_preview"
@@ -456,7 +457,8 @@ class LinkPreviewPlugin(Star):
         except OSError:
             pass
 
-    async def _make_card_image(self, platform, url, comments_mode=False, session=None, translate=False):
+    async def _make_card_image(self, platform, url, comments_mode=False, session=None,
+                               translate=False, ark=None):
         """抓取 + 渲染，返回图片路径；失败返回 None。"""
         n_comments = 10 if comments_mode else _int(self.config.get("comment_count", 3), 3, 0, 10)
         timeout = _int(self.config.get("fetch_timeout", 12), 12, 3, 60)
@@ -469,7 +471,8 @@ class LinkPreviewPlugin(Star):
                                         github_token=self.config.get("github_token") or None,
                                         comments=n_comments,
                                         steam_api_key=self.config.get("steam_api_key") or None,
-                                        x_service=self._x_service() if platform == "x" else None)
+                                        x_service=self._x_service() if platform == "x" else None,
+                                        ark=ark)
             if x_task:
                 card["comments"] = await x_task
             card = self._filter_card(card)
@@ -501,10 +504,13 @@ class LinkPreviewPlugin(Star):
     async def _preview(self, event, links, comments_mode=False, quiet=True, translate=False):
         self._clean_cache()
         session = event.unified_msg_origin
-        for platform, url in links:
+        for item in links:
+            platform, url = item[0], item[1]
+            ark = item[2] if len(item) > 2 else None
             logger.info(f"[LinkPreview] 开始预览 {platform} {url}")
             try:
-                path = await self._make_card_image(platform, url, comments_mode, session, translate)
+                path = await self._make_card_image(platform, url, comments_mode, session,
+                                                   translate, ark)
             except Blocked as e:
                 logger.info(f"[LinkPreview] {platform} {url} {'疑似不适宜内容' if isinstance(e, RestrictedBlocked) else '命中屏蔽词'}，已拦截")
                 if not quiet or _bool(self.config.get("block_notice", True), True):
@@ -529,19 +535,41 @@ class LinkPreviewPlugin(Star):
         text = (event.message_str or "").strip()
         if self._is_command(text) or not self._allowed(event):
             return
-        if "http" not in text.lower() and not any(isinstance(s, Comp.Json) for s in event.get_messages() or []):
+        low = text.lower()
+        if ("http" not in low and "miniapp" not in low
+                and not any(isinstance(s, Comp.Json) for s in event.get_messages() or [])):
             return
         limit = _int(self.config.get("max_links_per_message", 2), 2, 1, 5)
         text = self._message_text(event)
-        found = fetchers.find_links(text, self._platforms(), limit, self._web_blocklist(),
-                                    self._extra_tlds())
+        enabled = self._platforms()
+        block, tlds = self._web_blocklist(), self._extra_tlds()
+        found = fetchers.find_links(text, enabled, limit, block, tlds)
+        # QQ 小程序分享卡片：优先用 qqdocurl 抓它背后的真实网页（B 站、抖音…），
+        # 抓不到就退回卡片自带的标题/封面。卡片里的 m.q.qq.com 地址要剔掉，
+        # 否则还会被当成普通网页再抓一遍，出一张空卡。
+        miniapps = fetchers.qq_miniapps(text)
+        if miniapps:
+            inside = {fetchers.canonical_url(u) for a in miniapps
+                      for u in (a["page"], a["real"], a["icon"], a["preview"]) if u}
+            found = [(p, u) for p, u in found if fetchers.canonical_url(u) not in inside]
         session = event.unified_msg_origin
         links = []
-        for p, u in found:
-            if self._duplicate(session, u):
-                logger.info(f"[LinkPreview] 跳过重复链接：{u}")
+        for ark in miniapps:
+            hit = fetchers.find_links(ark["real"], enabled, 1, block, tlds) if ark["real"] else []
+            if hit:
+                links.extend(hit)
+            elif enabled.get("qqminiapp", True):
+                links.append(("qqminiapp", ark["url"], ark))
             else:
-                links.append((p, u))
+                logger.info(f"[LinkPreview] QQ 小程序卡片已关闭，跳过：{ark['title']}")
+        links.extend(found)
+        picked = []
+        for item in links:
+            if self._duplicate(session, item[1]):
+                logger.info(f"[LinkPreview] 跳过重复链接：{item[1]}")
+            else:
+                picked.append(item)
+        links = picked
         if not links:
             # 消息里明明有网址却没出卡，日志里要能看出原因（平台关了 / 被过滤 / 重复）
             if not found:

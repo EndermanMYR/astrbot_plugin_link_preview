@@ -674,5 +674,63 @@ class TestSubprocessCleanup(unittest.TestCase):
         self.assertIsNotNone(asyncio.run(go()))
 
 
+class TestQQMiniApp(unittest.TestCase):
+    """QQ 小程序分享卡片：qqdocurl 是背后真实网页，m.q.qq.com 是客户端专用页。"""
+
+    ARK = {
+        "app": "com.tencent.miniapp_01",
+        "desc": "",
+        "view": "view_8C8E89B49BE609866298ADDFF2DBABA4",
+        "ver": "1.0.0.19",
+        "prompt": "[QQ小程序]哔哩哔哩",
+        "meta": {"detail_1": {
+            "appid": "1109937557",
+            "title": "哔哩哔哩",
+            "desc": "哔哩哔哩(゜-゜)つロ 干杯~-bilibili",
+            "icon": "http://miniapp.gtimg.cn/public/appicon/xxx.png",
+            "preview": "https://i0.hdslb.com/bfs/archive/xxx.jpg",
+            "url": "m.q.qq.com/a/s/abcdef",
+            "qqdocurl": "https://b23.tv/AbCdEf?share_source=qq",
+        }},
+    }
+
+    def test_reads_qqdocurl(self):
+        text = "[CQ:json,data=" + json.dumps(self.ARK, ensure_ascii=False) + "]"
+        got = fetchers.qq_miniapps(text)
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0]["real"], "https://b23.tv/AbCdEf?share_source=qq")
+        self.assertEqual(got[0]["page"], "https://m.q.qq.com/a/s/abcdef")
+        self.assertEqual(got[0]["title"], "哔哩哔哩")
+
+    def test_real_url_goes_to_platform(self):
+        got = fetchers.qq_miniapps(json.dumps(self.ARK, ensure_ascii=False))
+        self.assertEqual(fetchers.find_links(got[0]["real"], ALL_ON)[0][0], "bilibili")
+
+    def test_native_miniapp_has_no_real_url(self):
+        ark = json.loads(json.dumps(self.ARK))
+        ark["meta"]["detail_1"].pop("qqdocurl")
+        got = fetchers.qq_miniapps(json.dumps(ark, ensure_ascii=False))
+        self.assertEqual(got[0]["real"], "")
+        self.assertEqual(got[0]["url"], "https://m.q.qq.com/a/s/abcdef")
+
+    def test_qqdocurl_on_client_host_is_ignored(self):
+        ark = json.loads(json.dumps(self.ARK))
+        ark["meta"]["detail_1"]["qqdocurl"] = "https://m.q.qq.com/a/p/1109937557"
+        got = fetchers.qq_miniapps(json.dumps(ark, ensure_ascii=False))
+        self.assertEqual(got[0]["real"], "")
+
+    def test_news_card_is_not_miniapp(self):
+        ark = {"app": "com.tencent.structmsg", "meta": {"news": {"title": "新闻", "jumpUrl": "https://example.com/a"}}}
+        self.assertEqual(fetchers.qq_miniapps(json.dumps(ark, ensure_ascii=False)), [])
+
+    def test_card_uses_ark_info(self):
+        got = fetchers.qq_miniapps(json.dumps(self.ARK, ensure_ascii=False))
+        c = fetchers.qq_miniapp_card(got[0]["url"], got[0])
+        self.assertEqual(c["platform"], "qqminiapp")
+        self.assertEqual(c["title"], "哔哩哔哩")
+        self.assertEqual(c["images"], ["https://i0.hdslb.com/bfs/archive/xxx.jpg"])
+        self.assertTrue(c["note"])
+
+
 if __name__ == "__main__":
     unittest.main()

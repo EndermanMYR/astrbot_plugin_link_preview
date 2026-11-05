@@ -111,6 +111,12 @@
                 "default": true,
                 "hint": "没被上面任何平台匹配到的链接，按页面 OpenGraph 出一张卡。内网地址和直链文件会自动跳过"
             },
+            "qqminiapp": {
+                "description": "QQ 小程序分享卡片",
+                "type": "bool",
+                "default": true,
+                "hint": "群里分享的 QQ 小程序卡片：卡片里带 qqdocurl 的按真实网页出卡（B 站、抖音等），没有的就用卡片自带的标题和封面"
+            },
             "bilibili": {
                 "description": "哔哩哔哩（含 b23.tv 短链）",
                 "type": "bool",

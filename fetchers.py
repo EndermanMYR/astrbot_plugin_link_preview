@@ -61,6 +61,7 @@ PLATFORMS = {
     "dailymotion": ("Dailymotion", "#0066dc"),
     "niconico": ("niconico", "#252525"),
     "web": ("网页", "#7c5cff"),
+    "qqminiapp": ("QQ 小程序", "#12b7f5"),
     # 国内视频平台
     "bilibili": ("哔哩哔哩", "#fb7299"),
     "douyin": ("抖音", "#000000"),
@@ -1748,7 +1749,115 @@ async def fetch_twitch(client, url):
     }
 
 
-async def fetch(client, platform, url, github_token=None, comments=0, steam_api_key=None, x_service=None):
+# ---------------------------------------------------------------------------
+# QQ 分享卡片：小程序
+# ---------------------------------------------------------------------------
+
+# QQ 小程序分享到群里是一条 Ark Json，meta.detail_1 里同时带着两个地址：
+#   url      -> m.q.qq.com/a/s/xxx，只有 QQ 客户端能打开，服务端抓不到内容
+#   qqdocurl -> 小程序背后的真实网页（b23.tv、抖音、小红书…），有就优先用它
+# 以前这两个地址都被当成普通网页去抓，结果不是抓出个「网页」空卡，就是报错。
+QQ_ARK_APP = re.compile(r"^com\.tencent\.miniapp", re.I)
+QQ_CLIENT_HOSTS = ("m.q.qq.com", "q.qq.com", "mqqapi.com")
+
+
+def _http_url(value):
+    """卡片里的地址补成能抓的 http(s) 地址；不像网址就返回空串。"""
+    s = htmllib.unescape(str(value or "")).strip()
+    if not s or len(s) > 2048 or "\n" in s:
+        return ""
+    if s.startswith("//"):
+        s = "https:" + s
+    elif not re.match(r"https?://", s, re.I):
+        if "." not in s.split("/")[0]:
+            return ""
+        s = "https://" + s
+    return s
+
+
+def _ark_objects(text):
+    """文本里所有 QQ Ark Json 对象，返回 [(起, 止, 对象)]。
+
+    Json 消息组件和 [CQ:json,data=...] 都是合法 JSON，直接逐个 "{" 试解析，
+    比按字段名找更耐改（不同版本 QQ 的字段顺序不一样）。
+    """
+    text = text or ""
+    dec = json.JSONDecoder()
+    out, i = [], text.find("{")
+    while i >= 0:
+        try:
+            obj, end = dec.raw_decode(text, i)
+        except ValueError:
+            obj, end = None, i + 1
+        if isinstance(obj, dict) and QQ_ARK_APP.match(str(obj.get("app") or "")):
+            out.append((i, end, obj))
+            i = text.find("{", end)
+        else:
+            i = text.find("{", i + 1)
+    return out
+
+
+def _ark_detail(obj):
+    """Ark 卡片里的正文块：小程序是 detail_1，网页分享是 news。"""
+    meta = obj.get("meta") or {}
+    if not isinstance(meta, dict):
+        return {}
+    for key in ("detail_1", "news", "detail"):
+        block = meta.get(key)
+        if isinstance(block, dict):
+            return block
+    return {}
+
+
+def qq_miniapps(text):
+    """消息里的 QQ 小程序卡片，按出现顺序返回。
+
+    每项：title / desc / icon / preview 是卡片自带的展示信息，
+    page 是 m.q.qq.com 的小程序页面，real 是小程序背后的真实网页（没有就空）。
+    """
+    out, seen = [], set()
+    for _, _, obj in _ark_objects(text):
+        d = _ark_detail(obj)
+        title = flatten(d.get("title") or "")
+        desc = clean_desc(d.get("desc"))
+        if not title:
+            title, desc = desc, ""
+        if not title:
+            continue
+        page = _http_url(d.get("url") or d.get("jumpUrl"))
+        doc = _http_url(d.get("qqdocurl"))
+        real = doc if doc and _host(doc) not in QQ_CLIENT_HOSTS else ""
+        appid = str(d.get("appid") or "").strip()
+        key = real or page or appid
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "title": title, "desc": desc,
+            "icon": _http_url(d.get("icon")),
+            "preview": _http_url(d.get("preview")),
+            "appid": appid, "page": page, "real": real,
+            "url": real or page or f"https://m.q.qq.com/a/p/{appid}",
+        })
+    return out
+
+
+def qq_miniapp_card(url, ark=None):
+    """小程序卡片本身抓不到网页，用卡片自带的标题、简介、封面画一张。"""
+    ark = ark or {}
+    images = [ark["preview"]] if ark.get("preview") else []
+    c = card("qqminiapp", url or ark.get("url") or "",
+             title=ark.get("title"), text=ark.get("desc"), images=images)
+    c["note"] = "QQ 小程序只能在 QQ 里打开，这张卡用的是分享卡片自带的信息"
+    if ark.get("icon"):
+        c["author"] = {"name": "QQ 小程序", "handle": None, "avatar": ark["icon"], "bio": None}
+    return c
+
+
+async def fetch(client, platform, url, github_token=None, comments=0, steam_api_key=None,
+                x_service=None, ark=None):
+    if platform == "qqminiapp":
+        return qq_miniapp_card(url, ark)
     if platform == "x":
         return await fetch_x(client, url, x_service)
     if platform == "youtube":
