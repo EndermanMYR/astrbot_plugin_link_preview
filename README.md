@@ -11,7 +11,7 @@
 <table>
   <tr>
     <td width="190" align="center">
-      <img width="170" alt="Link Preview logo" src="docs/images/logo.png" style="border-radius: 24px;" />
+      <img width="170" alt="Link Preview logo" src="logo.png" style="border-radius: 24px;" />
     </td>
     <td>
       <strong>Link Preview · 外链预览</strong><br />
